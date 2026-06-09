@@ -4,6 +4,7 @@ const path = require("node:path");
 const { handlePlans, json } = require("../api/handlers/plans");
 
 const port = Number(process.env.PORT || 3000);
+const host = process.env.HOST || "127.0.0.1";
 const webRoot = path.resolve(__dirname, "../web");
 
 const server = http.createServer(async (req, res) => {
@@ -26,9 +27,9 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(port, () => {
+server.listen(port, host, () => {
   console.log(`E Relations local server`);
-  console.log(`http://localhost:${port}`);
+  console.log(`http://${host}:${port}`);
 });
 
 async function serveStatic(pathname, res) {

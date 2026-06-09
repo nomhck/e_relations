@@ -1,3 +1,6 @@
 node_modules/
 .DS_Store
 data/plans/*.json
+.env
+.env.*
+local.settings.json

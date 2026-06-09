@@ -24,7 +24,7 @@ node server/dev-server.js
 ブラウザで開く:
 
 ```txt
-http://localhost:3000
+http://127.0.0.1:3000
 ```
 
 ## チェック
@@ -61,3 +61,11 @@ https://nomhck.github.io/e_relations/
 
 - `server/` と `api/` はGitHub Pagesでは動きません。
 - 複数人で同じ工程を保存・共有する場合はAzure Static Web Apps + APIへ移行します。
+
+## Security Notes
+
+- このリポジトリには秘密情報、APIキー、GitHub token、Azure接続文字列を入れないでください。
+- `.env`, `.env.*`, `local.settings.json`, `data/plans/*.json` はgit管理対象外です。
+- ローカル開発サーバーは既定で `127.0.0.1` のみにbindします。
+- GitHub Pages版は公開UIデモです。業務上の実データや機密工程を埋め込まないでください。
+- `server/` のAPIはMVP用です。インターネット公開する場合は認証・編集キー・保存データ検証を追加してください。
