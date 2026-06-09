@@ -5,6 +5,7 @@ const DAY_W = 18;
 const AREAS = ["Engineering", "Procurement", "Fabrication", "Construction", "Commissioning"];
 const RELATIONS = ["FS", "SS", "FF", "SF"];
 
+// UI state is kept in memory, mirrored to localStorage, and optionally saved through the local API.
 let state = loadState();
 let schedule = null;
 let drag = null;
@@ -14,6 +15,7 @@ let remoteSaveTimer = null;
 const $ = (selector) => document.querySelector(selector);
 const els = {};
 
+// Bootstrap the page after the DOM exists, then load any server-side saved demo plan.
 document.addEventListener("DOMContentLoaded", async () => {
   Object.assign(els, {
     metrics: $("#metrics"),
@@ -40,35 +42,42 @@ document.addEventListener("DOMContentLoaded", async () => {
   render();
 });
 
+// Wire all UI controls. Most handlers update state, persist it, and re-render.
 function bindEvents() {
   els.addTask.addEventListener("click", addTask);
   els.linkMode.addEventListener("click", () => {
+    // Link mode makes node clicks create dependencies instead of simply selecting tasks.
     state.linkMode = !state.linkMode;
     if (!state.linkMode) state.linkSource = null;
     saveState();
     render();
   });
   els.autoLayout.addEventListener("click", () => {
+    // Auto-layout keeps the current schedule but recalculates node positions.
     autoLayout();
     saveState();
     render();
     setStatus("自動整列しました");
   });
   els.resetData.addEventListener("click", () => {
+    // Reset returns the browser to the built-in sample EPC plan.
     state = seedState();
     saveState();
     render();
   });
   els.search.addEventListener("input", () => {
+    // Search is applied across code, name, owner, and area.
     state.search = els.search.value.trim();
     saveState();
     render();
   });
   els.relationType.addEventListener("change", () => {
+    // Relation type is used by the next dependency created in link mode.
     state.relationType = els.relationType.value;
     saveState();
   });
   els.lagDays.addEventListener("change", () => {
+    // Clamp lag so accidental large values do not distort the demo schedule.
     state.lagDays = clamp(parseInt(els.lagDays.value, 10), -30, 90, 0);
     els.lagDays.value = state.lagDays;
     saveState();
@@ -76,6 +85,7 @@ function bindEvents() {
 
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => {
+      // The active view is persisted so refreshes keep the same working surface.
       state.view = tab.dataset.view;
       saveState();
       render();
@@ -83,6 +93,7 @@ function bindEvents() {
   });
 
   els.filters.addEventListener("click", (event) => {
+    // Area filters narrow all views to the selected EPC work area.
     const button = event.target.closest("[data-area]");
     if (!button) return;
     state.area = button.dataset.area;
@@ -92,6 +103,7 @@ function bindEvents() {
 
   els.nodes.addEventListener("pointerdown", startDrag);
   els.nodes.addEventListener("click", (event) => {
+    // Dragging a node also emits a click, so skipClick suppresses that accidental selection.
     if (skipClick) return;
     const node = event.target.closest(".node");
     if (!node) return;
@@ -100,6 +112,7 @@ function bindEvents() {
 
   els.taskTable.addEventListener("change", onTableChange);
   els.taskTable.addEventListener("click", (event) => {
+    // Selecting a table row should not interrupt native input/select interactions.
     const row = event.target.closest("[data-id]");
     if (!row) return;
     if (event.target.closest("input, select, textarea, button")) {
@@ -115,6 +128,7 @@ function bindEvents() {
   els.inspector.addEventListener("change", onInspectorChange);
 }
 
+// Load the last browser-local state. Broken JSON falls back to the sample data.
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -125,11 +139,13 @@ function loadState() {
   return seedState();
 }
 
+// Persist locally immediately and debounce the API save for local server mode.
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   scheduleRemoteSave();
 }
 
+// Load the shared demo plan from the local API when the dev server is running.
 async function loadRemotePlan() {
   try {
     const res = await fetch("/api/plans/demo");
@@ -149,6 +165,7 @@ async function loadRemotePlan() {
   }
 }
 
+// Debounced write-through save. Static hosting still works because API failures are ignored.
 function scheduleRemoteSave() {
   clearTimeout(remoteSaveTimer);
   remoteSaveTimer = setTimeout(() => {
@@ -162,6 +179,7 @@ function scheduleRemoteSave() {
   }, 250);
 }
 
+// Built-in EPC sample used for first load, reset, and GitHub Pages static demo mode.
 function seedState() {
   return {
     view: "network",
@@ -210,14 +228,17 @@ function seedState() {
   };
 }
 
+// Task factory keeps seed data compact and consistent.
 function task(id, code, name, area, owner, duration, x, y) {
   return { id, code, name, area, owner, duration, progress: 0, x, y };
 }
 
+// Dependency factory supports FS/SS/FF/SF plus lag days.
 function dep(id, from, to, type, lag) {
   return { id, from, to, type, lag };
 }
 
+// Main render pipeline: recalculate schedule, sync controls, then repaint every view.
 function render() {
   schedule = calculateSchedule(state.tasks, state.dependencies);
   els.search.value = state.search || "";
@@ -251,6 +272,7 @@ function render() {
   }
 }
 
+// Render summary cards for project duration, task count, dependency count, and critical count.
 function renderMetrics() {
   const criticalCount = [...schedule.items.values()].filter((item) => item.critical).length;
   const metrics = [
@@ -265,6 +287,7 @@ function renderMetrics() {
     .join("");
 }
 
+// Render area filter buttons and their task counts.
 function renderFilters() {
   const buttons = [
     ["all", "すべて", state.tasks.length],
@@ -281,6 +304,7 @@ function renderFilters() {
     .join("");
 }
 
+// Render short list of tasks that need attention because they are critical or low-float.
 function renderFocus() {
   const items = state.tasks
     .map((taskItem) => ({ task: taskItem, data: schedule.items.get(taskItem.id) }))
@@ -306,6 +330,7 @@ function renderFocus() {
   });
 }
 
+// Render the dependency network nodes and their SVG edges.
 function renderNetwork() {
   const visible = visibleTasks();
   const visibleIds = new Set(visible.map((taskItem) => taskItem.id));
@@ -333,6 +358,7 @@ function renderNetwork() {
     .join("");
 }
 
+// Draw dependency edges with spread ports so multiple links do not fully overlap.
 function renderEdges(visibleIds) {
   const map = new Map(state.tasks.map((taskItem) => [taskItem.id, taskItem]));
   const width = 1350;
@@ -355,6 +381,7 @@ function renderEdges(visibleIds) {
 
   const paths = visibleDeps
     .map((item, index) => {
+      // Route from the right side for forward links and the left side for backward links.
       const from = map.get(item.from);
       const to = map.get(item.to);
       const fromData = schedule.items.get(item.from);
@@ -368,6 +395,7 @@ function renderEdges(visibleIds) {
       const direction = forward ? 1 : -1;
       const routeOffset = ((index % 7) - 3) * 18;
       const distanceX = Math.abs(x2 - x1);
+      // Reduce bend on short edges; otherwise adjacent nodes can produce noisy loops.
       const bend = routeOffset * Math.min(1, distanceX / 220);
       const dx = Math.max(28, Math.min(110, distanceX * 0.42));
       const c1x = x1 + direction * dx;
@@ -389,6 +417,7 @@ function renderEdges(visibleIds) {
   els.edges.innerHTML = defs + paths;
 }
 
+// Compute vertical offsets for each edge endpoint so fan-in/fan-out links are distinguishable.
 function buildEdgePortMeta(dependencies) {
   const outgoing = new Map();
   const incoming = new Map();
@@ -402,6 +431,7 @@ function buildEdgePortMeta(dependencies) {
 
   const meta = new Map();
   outgoing.forEach((items) => {
+    // Outgoing ports are ordered by target vertical position.
     const sorted = items.slice().sort((a, b) => {
       const aTarget = getTask(a.to);
       const bTarget = getTask(b.to);
@@ -414,6 +444,7 @@ function buildEdgePortMeta(dependencies) {
   });
 
   incoming.forEach((items) => {
+    // Incoming ports are ordered by source vertical position.
     const sorted = items.slice().sort((a, b) => {
       const aSource = getTask(a.from);
       const bSource = getTask(b.from);
@@ -436,6 +467,7 @@ function buildEdgePortMeta(dependencies) {
   return meta;
 }
 
+// Render a simple calculated Gantt chart from earliest start and task duration.
 function renderGantt() {
   const tasks = visibleTasks().slice().sort((a, b) => schedule.items.get(a.id).es - schedule.items.get(b.id).es);
   const days = Math.max(42, schedule.duration + 14);
@@ -470,6 +502,7 @@ function renderGantt() {
   `;
 }
 
+// Render editable table rows. Change events update the same task state used by all views.
 function renderTable() {
   els.taskTable.innerHTML = visibleTasks()
     .map((taskItem) => {
@@ -489,6 +522,7 @@ function renderTable() {
     .join("");
 }
 
+// Render the detail editor for the currently selected task.
 function renderInspector() {
   const selected = getTask(state.selected);
   if (!selected) {
@@ -526,6 +560,7 @@ function renderInspector() {
   `;
 }
 
+// Handle a network node click: select normally, or create/update a dependency in link mode.
 function onNodeClick(id) {
   if (!state.linkMode) {
     state.selected = id;
@@ -548,6 +583,7 @@ function onNodeClick(id) {
   ];
 
   if (hasCycle(state.tasks, nextDeps)) {
+    // Reject cycles immediately so the schedule calculation remains a DAG.
     setStatus("循環依存になるため接続できません", "error");
     return;
   }
@@ -565,6 +601,7 @@ function onNodeClick(id) {
   render();
 }
 
+// Start dragging a task node in the network view.
 function startDrag(event) {
   const node = event.target.closest(".node");
   if (!node || state.linkMode) return;
@@ -583,6 +620,7 @@ function startDrag(event) {
   document.addEventListener("pointerup", endDrag, { once: true });
 }
 
+// Move the dragged node and redraw only the SVG edges for responsive feedback.
 function moveDrag(event) {
   if (!drag) return;
   const taskItem = getTask(drag.id);
@@ -596,6 +634,7 @@ function moveDrag(event) {
   renderEdges(new Set(visibleTasks().map((task) => task.id)));
 }
 
+// Finish node dragging, persist the new position, and suppress the following synthetic click.
 function endDrag() {
   if (drag?.moved) {
     skipClick = true;
@@ -608,18 +647,21 @@ function endDrag() {
   drag = null;
 }
 
+// Apply changes made in the table view.
 function onTableChange(event) {
   const row = event.target.closest("[data-id]");
   if (!row) return;
   updateTask(row.dataset.id, event.target.dataset.field, event.target.value);
 }
 
+// Apply changes made in the inspector panel.
 function onInspectorChange(event) {
   const field = event.target.dataset.inspector;
   if (!field) return;
   updateTask(state.selected, field, event.target.value);
 }
 
+// Update a single task field and re-render all dependent views.
 function updateTask(id, field, value) {
   const taskItem = getTask(id);
   if (!taskItem) return;
@@ -631,6 +673,7 @@ function updateTask(id, field, value) {
   render();
 }
 
+// Add a new task in the current area filter, then select it for editing.
 function addTask() {
   const id = `t${Date.now()}`;
   const taskItem = task(id, `N${state.tasks.length + 1}`, "新規タスク", state.area === "all" ? "Engineering" : state.area, "", 5, 80, 120);
@@ -640,6 +683,7 @@ function addTask() {
   render();
 }
 
+// Place tasks in area lanes based on calculated earliest start.
 function autoLayout() {
   const byArea = new Map();
   const sorted = state.tasks.slice().sort((a, b) => schedule.items.get(a.id).es - schedule.items.get(b.id).es);
@@ -652,6 +696,7 @@ function autoLayout() {
   });
 }
 
+// Calculate CPM-style earliest/latest dates, total duration, float, and critical flags.
 function calculateSchedule(tasks, dependencies) {
   const map = new Map(tasks.map((taskItem) => [taskItem.id, taskItem]));
   const items = new Map(tasks.map((taskItem) => [taskItem.id, { es: 0, ef: taskItem.duration, ls: 0, lf: 0, float: 0, critical: false }]));
@@ -659,6 +704,7 @@ function calculateSchedule(tasks, dependencies) {
   const indegree = new Map(tasks.map((taskItem) => [taskItem.id, 0]));
 
   for (const item of dependencies) {
+    // Build adjacency and indegree for topological traversal.
     if (!map.has(item.from) || !map.has(item.to)) continue;
     outgoing.get(item.from).push(item);
     indegree.set(item.to, indegree.get(item.to) + 1);
@@ -667,6 +713,7 @@ function calculateSchedule(tasks, dependencies) {
   const queue = tasks.filter((taskItem) => indegree.get(taskItem.id) === 0).map((taskItem) => taskItem.id);
   const topo = [];
   while (queue.length) {
+    // Kahn topological sort gives safe forward/backward schedule order.
     const id = queue.shift();
     topo.push(id);
     for (const item of outgoing.get(id)) {
@@ -676,6 +723,7 @@ function calculateSchedule(tasks, dependencies) {
   }
 
   for (const id of topo) {
+    // Forward pass: earliest start is constrained by predecessor relation offsets.
     const from = map.get(id);
     const fromItem = items.get(id);
     fromItem.ef = fromItem.es + from.duration;
@@ -687,6 +735,7 @@ function calculateSchedule(tasks, dependencies) {
   }
 
   for (const taskItem of tasks) {
+    // Normalize earliest finish after all starts are known.
     const item = items.get(taskItem.id);
     item.ef = item.es + taskItem.duration;
   }
@@ -694,12 +743,14 @@ function calculateSchedule(tasks, dependencies) {
   const duration = Math.max(0, ...[...items.values()].map((item) => item.ef));
 
   for (const taskItem of tasks) {
+    // Initialize backward pass from project finish.
     const item = items.get(taskItem.id);
     item.ls = duration - taskItem.duration;
     item.lf = duration;
   }
 
   for (const id of topo.slice().reverse()) {
+    // Backward pass: latest start is constrained by successor latest starts.
     const from = map.get(id);
     const fromItem = items.get(id);
     for (const item of outgoing.get(id)) {
@@ -715,6 +766,7 @@ function calculateSchedule(tasks, dependencies) {
   return { items, duration };
 }
 
+// Convert FS/SS/FF/SF dependency semantics into a start-to-start offset.
 function dependencyOffset(item, from, to) {
   const lag = Number(item.lag) || 0;
   if (item.type === "SS") return lag;
@@ -723,11 +775,13 @@ function dependencyOffset(item, from, to) {
   return from.duration + lag;
 }
 
+// Detect cycles before accepting new dependencies.
 function hasCycle(tasks, dependencies) {
   const ids = new Set(tasks.map((taskItem) => taskItem.id));
   const outgoing = new Map(tasks.map((taskItem) => [taskItem.id, []]));
   const indegree = new Map(tasks.map((taskItem) => [taskItem.id, 0]));
   dependencies.forEach((item) => {
+    // Ignore orphan dependencies defensively.
     if (!ids.has(item.from) || !ids.has(item.to)) return;
     outgoing.get(item.from).push(item.to);
     indegree.set(item.to, indegree.get(item.to) + 1);
@@ -735,6 +789,7 @@ function hasCycle(tasks, dependencies) {
   const queue = tasks.filter((taskItem) => indegree.get(taskItem.id) === 0).map((taskItem) => taskItem.id);
   let visited = 0;
   while (queue.length) {
+    // If every task cannot be visited, a cycle remains.
     const id = queue.shift();
     visited += 1;
     outgoing.get(id).forEach((to) => {
@@ -745,6 +800,7 @@ function hasCycle(tasks, dependencies) {
   return visited !== tasks.length;
 }
 
+// Apply current area and text filters.
 function visibleTasks() {
   const q = (state.search || "").toLowerCase();
   return state.tasks.filter((taskItem) => {
@@ -754,6 +810,7 @@ function visibleTasks() {
   });
 }
 
+// Return predecessor codes for table display.
 function predecessorCodes(id) {
   return state.dependencies
     .filter((item) => item.to === id)
@@ -761,19 +818,23 @@ function predecessorCodes(id) {
     .filter(Boolean);
 }
 
+// Find a task by id.
 function getTask(id) {
   return state.tasks.find((taskItem) => taskItem.id === id);
 }
 
+// Update the status bar text and severity class.
 function setStatus(text, type = "") {
   els.status.textContent = text;
   els.status.className = `status ${type}`.trim();
 }
 
+// Clamp numeric input and use fallback for invalid values.
 function clamp(value, min, max, fallback) {
   return Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
 }
 
+// Escape text before injecting it into HTML templates.
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -783,6 +844,7 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+// Attribute escaping is currently the same as HTML escaping.
 function escapeAttr(value) {
   return escapeHtml(value);
 }
