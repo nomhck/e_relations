@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>EPC Dependency Planner</title>
+    <link rel="stylesheet" href="./styles.css?v=4">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand" aria-label="EPC Dependency Planner">
+          <div class="brand-mark">EPC</div>
+          <div>
+            <div class="brand-title">Dependency Planner</div>
+            <div class="brand-subtitle">工程依存関係エディタ</div>
+          </div>
+        </div>
+
+        <div class="toolbar" aria-label="主要操作">
+          <button class="icon-button" id="addTaskButton" title="タスク追加" aria-label="タスク追加">+</button>
+          <button class="icon-button" id="deleteTaskButton" title="選択タスク削除" aria-label="選択タスク削除">−</button>
+          <button class="icon-button" id="linkModeButton" title="依存線を追加" aria-label="依存線を追加">↘</button>
+          <button class="icon-button" id="autoLayoutButton" title="自動整列" aria-label="自動整列">⇄</button>
+          <button class="icon-button" id="exportButton" title="JSONエクスポート" aria-label="JSONエクスポート">⇩</button>
+          <button class="icon-button" id="importButton" title="JSONインポート" aria-label="JSONインポート">⇧</button>
+          <button class="icon-button" id="resetButton" title="サンプルへ戻す" aria-label="サンプルへ戻す">↺</button>
+        </div>
+
+        <div class="dependency-toolbar" aria-label="依存設定">
+          <label>
+            <span>種別</span>
+            <select id="relationType">
+              <option value="FS">FS</option>
+              <option value="SS">SS</option>
+              <option value="FF">FF</option>
+              <option value="SF">SF</option>
+            </select>
+          </label>
+          <label>
+            <span>ラグ</span>
+            <input id="lagDays" type="number" min="-30" max="90" step="1" value="0">
+          </label>
+        </div>
+      </header>
+
+      <main class="workspace">
+        <aside class="sidebar">
+          <section class="project-panel">
+            <div class="panel-kicker">PROJECT</div>
+            <h1>Greenfield Process Unit</h1>
+            <div class="metric-grid" id="metricGrid"></div>
+          </section>
+
+          <section class="filter-panel">
+            <div class="section-heading">領域</div>
+            <div class="filter-list" id="packageFilters"></div>
+          </section>
+
+          <section class="risk-panel">
+            <div class="section-heading">注視項目</div>
+            <div class="risk-list" id="riskList"></div>
+          </section>
+        </aside>
+
+        <section class="stage">
+          <div class="stage-header">
+            <div class="view-tabs" role="tablist" aria-label="表示切替">
+              <button class="tab-button active" data-view="network" role="tab" aria-selected="true">ネットワーク</button>
+              <button class="tab-button" data-view="gantt" role="tab" aria-selected="false">ガント</button>
+              <button class="tab-button" data-view="table" role="tab" aria-selected="false">表</button>
+            </div>
+            <label class="search-box">
+              <span>検索</span>
+              <input id="searchInput" type="search" placeholder="コード・設備・担当">
+            </label>
+          </div>
+
+          <div class="statusbar" id="statusBar">Ready</div>
+
+          <div class="view-stack">
+            <section class="view active" id="networkView" data-view="network" aria-label="ネットワーク図">
+              <div class="network-canvas" id="networkCanvas">
+                <svg class="edge-layer" id="edgeLayer" aria-hidden="true"></svg>
+                <div class="node-layer" id="nodeLayer"></div>
+              </div>
+            </section>
+
+            <section class="view" id="ganttView" data-view="gantt" aria-label="ガントチャート">
+              <div class="gantt-scroller" id="ganttScroller"></div>
+            </section>
+
+            <section class="view" id="tableView" data-view="table" aria-label="工程表">
+              <div class="table-wrap">
+                <table class="task-table">
+                  <thead>
+                    <tr>
+                      <th>コード</th>
+                      <th>タスク</th>
+                      <th>領域</th>
+                      <th>担当</th>
+                      <th>期間</th>
+                      <th>制約</th>
+                      <th>進捗</th>
+                      <th>先行</th>
+                      <th>余裕</th>
+                    </tr>
+                  </thead>
+                  <tbody id="taskTableBody"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <aside class="inspector" id="inspector">
+          <div class="empty-inspector">
+            <div class="section-heading">詳細</div>
+            <p>タスクを選択</p>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <input id="importFile" type="file" accept="application/json" hidden>
+
+    <template id="taskNodeTemplate">
+      <article class="task-node" tabindex="0">
+        <div class="node-topline">
+          <span class="node-code"></span>
+          <span class="node-area"></span>
+        </div>
+        <div class="node-name"></div>
+        <div class="node-meta">
+          <span class="node-duration"></span>
+          <span class="node-float"></span>
+        </div>
+        <div class="progress-track">
+          <span class="progress-fill"></span>
+        </div>
+      </article>
+    </template>
+
+    <script src="./app.js?v=4"></script>
+  </body>
+</html>
