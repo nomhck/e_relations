@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>E Relations</title>
+    <link rel="stylesheet" href="./styles.css?v=2">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">ER</div>
+        <div>
+          <h1>E Relations</h1>
+          <p>EPC工程依存関係エディタ</p>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="addTask" title="タスク追加">+</button>
+        <button id="linkMode" title="依存線追加">↘</button>
+        <button id="autoLayout" title="自動整列">⇄</button>
+        <button id="resetData" title="初期化">↺</button>
+      </div>
+
+      <div class="link-settings">
+        <label>関係
+          <select id="relationType">
+            <option value="FS">FS</option>
+            <option value="SS">SS</option>
+            <option value="FF">FF</option>
+            <option value="SF">SF</option>
+          </select>
+        </label>
+        <label>ラグ
+          <input id="lagDays" type="number" value="0" min="-30" max="90">
+        </label>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <section>
+          <div class="eyebrow">PROJECT</div>
+          <h2>Greenfield Process Unit</h2>
+          <div class="metrics" id="metrics"></div>
+        </section>
+
+        <section>
+          <div class="eyebrow">AREA</div>
+          <div class="filters" id="filters"></div>
+        </section>
+
+        <section>
+          <div class="eyebrow">FOCUS</div>
+          <div class="focus-list" id="focusList"></div>
+        </section>
+      </aside>
+
+      <section class="stage">
+        <div class="stage-head">
+          <div class="tabs">
+            <button class="tab active" data-view="network">ネットワーク</button>
+            <button class="tab" data-view="gantt">ガント</button>
+            <button class="tab" data-view="table">表</button>
+          </div>
+          <input id="search" class="search" type="search" placeholder="コード・タスク・担当で検索">
+        </div>
+
+        <div class="status" id="status">Ready</div>
+
+        <section class="view active" id="networkView">
+          <div class="network" id="network">
+            <svg id="edges" class="edges"></svg>
+            <div id="nodes" class="nodes"></div>
+          </div>
+        </section>
+
+        <section class="view" id="ganttView">
+          <div id="gantt" class="gantt"></div>
+        </section>
+
+        <section class="view" id="tableView">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>コード</th>
+                  <th>タスク</th>
+                  <th>領域</th>
+                  <th>期間</th>
+                  <th>進捗</th>
+                  <th>先行</th>
+                  <th>余裕</th>
+                </tr>
+              </thead>
+              <tbody id="taskTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+
+      <aside class="inspector" id="inspector"></aside>
+    </main>
+
+    <script src="./app.js?v=2"></script>
+  </body>
+</html>

@@ -1,0 +1,788 @@
+const STORAGE_KEY = "e-relations-gui-v1";
+const NODE_W = 196;
+const NODE_H = 110;
+const DAY_W = 18;
+const AREAS = ["Engineering", "Procurement", "Fabrication", "Construction", "Commissioning"];
+const RELATIONS = ["FS", "SS", "FF", "SF"];
+
+let state = loadState();
+let schedule = null;
+let drag = null;
+let skipClick = false;
+let remoteSaveTimer = null;
+
+const $ = (selector) => document.querySelector(selector);
+const els = {};
+
+document.addEventListener("DOMContentLoaded", async () => {
+  Object.assign(els, {
+    metrics: $("#metrics"),
+    filters: $("#filters"),
+    focusList: $("#focusList"),
+    status: $("#status"),
+    network: $("#network"),
+    edges: $("#edges"),
+    nodes: $("#nodes"),
+    gantt: $("#gantt"),
+    taskTable: $("#taskTable"),
+    inspector: $("#inspector"),
+    search: $("#search"),
+    addTask: $("#addTask"),
+    linkMode: $("#linkMode"),
+    autoLayout: $("#autoLayout"),
+    resetData: $("#resetData"),
+    relationType: $("#relationType"),
+    lagDays: $("#lagDays")
+  });
+
+  bindEvents();
+  await loadRemotePlan();
+  render();
+});
+
+function bindEvents() {
+  els.addTask.addEventListener("click", addTask);
+  els.linkMode.addEventListener("click", () => {
+    state.linkMode = !state.linkMode;
+    if (!state.linkMode) state.linkSource = null;
+    saveState();
+    render();
+  });
+  els.autoLayout.addEventListener("click", () => {
+    autoLayout();
+    saveState();
+    render();
+    setStatus("自動整列しました");
+  });
+  els.resetData.addEventListener("click", () => {
+    state = seedState();
+    saveState();
+    render();
+  });
+  els.search.addEventListener("input", () => {
+    state.search = els.search.value.trim();
+    saveState();
+    render();
+  });
+  els.relationType.addEventListener("change", () => {
+    state.relationType = els.relationType.value;
+    saveState();
+  });
+  els.lagDays.addEventListener("change", () => {
+    state.lagDays = clamp(parseInt(els.lagDays.value, 10), -30, 90, 0);
+    els.lagDays.value = state.lagDays;
+    saveState();
+  });
+
+  document.querySelectorAll(".tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      state.view = tab.dataset.view;
+      saveState();
+      render();
+    });
+  });
+
+  els.filters.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-area]");
+    if (!button) return;
+    state.area = button.dataset.area;
+    saveState();
+    render();
+  });
+
+  els.nodes.addEventListener("pointerdown", startDrag);
+  els.nodes.addEventListener("click", (event) => {
+    if (skipClick) return;
+    const node = event.target.closest(".node");
+    if (!node) return;
+    onNodeClick(node.dataset.id);
+  });
+
+  els.taskTable.addEventListener("change", onTableChange);
+  els.taskTable.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-id]");
+    if (!row) return;
+    if (event.target.closest("input, select, textarea, button")) {
+      state.selected = row.dataset.id;
+      saveState();
+      return;
+    }
+    state.selected = row.dataset.id;
+    saveState();
+    render();
+  });
+
+  els.inspector.addEventListener("change", onInspectorChange);
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // Ignore broken localStorage state.
+  }
+  return seedState();
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  scheduleRemoteSave();
+}
+
+async function loadRemotePlan() {
+  try {
+    const res = await fetch("/api/plans/demo");
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.plan?.tasks && data.plan?.dependencies) {
+      state = {
+        ...state,
+        ...data.plan,
+        view: state.view || "network",
+        area: state.area || "all",
+        search: state.search || ""
+      };
+    }
+  } catch {
+    // Local static file mode can still run without the API server.
+  }
+}
+
+function scheduleRemoteSave() {
+  clearTimeout(remoteSaveTimer);
+  remoteSaveTimer = setTimeout(() => {
+    fetch("/api/plans/demo", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan: state })
+    }).catch(() => {
+      // Keep the UI usable even if the local API is not running.
+    });
+  }, 250);
+}
+
+function seedState() {
+  return {
+    view: "network",
+    area: "all",
+    search: "",
+    selected: "t4",
+    linkMode: false,
+    linkSource: null,
+    relationType: "FS",
+    lagDays: 0,
+    tasks: [
+      task("t1", "E100", "PFD確定", "Engineering", "Process Lead", 8, 40, 78),
+      task("t2", "E110", "P&ID Rev.B発行", "Engineering", "Process Lead", 14, 285, 72),
+      task("t3", "E120", "HAZOPレビュー", "Engineering", "HSE Manager", 6, 535, 80),
+      task("t4", "P100", "長納期機器RFQ", "Procurement", "Procurement", 10, 285, 240),
+      task("t5", "P110", "ベンダー評価・発注", "Procurement", "Procurement", 12, 535, 232),
+      task("t6", "F100", "圧力容器製作", "Fabrication", "Vendor A", 35, 785, 232),
+      task("t7", "F110", "現地搬入", "Fabrication", "Logistics", 8, 1035, 240),
+      task("t8", "C100", "造成・仮設", "Construction", "Site Civil", 18, 40, 478),
+      task("t9", "C110", "基礎施工", "Construction", "Site Civil", 20, 285, 472),
+      task("t10", "C120", "鉄骨建方", "Construction", "Construction", 16, 535, 478),
+      task("t11", "C130", "機器据付", "Construction", "Mechanical", 12, 785, 468),
+      task("t12", "C140", "配管プレファブ・取付", "Construction", "Piping Lead", 22, 1035, 470),
+      task("t13", "C150", "E&I敷設・結線", "Construction", "E&I Lead", 18, 1035, 635),
+      task("t14", "M100", "プレコミッショニング", "Commissioning", "Completions", 10, 785, 635),
+      task("t15", "M110", "試運転開始", "Commissioning", "Commissioning", 7, 535, 635)
+    ],
+    dependencies: [
+      dep("d1", "t1", "t2", "FS", 0),
+      dep("d2", "t2", "t3", "FS", 0),
+      dep("d3", "t2", "t4", "SS", 4),
+      dep("d4", "t4", "t5", "FS", 0),
+      dep("d5", "t5", "t6", "FS", 5),
+      dep("d6", "t6", "t7", "FS", 0),
+      dep("d7", "t8", "t9", "FS", 0),
+      dep("d8", "t9", "t10", "FS", 2),
+      dep("d9", "t10", "t11", "FS", 0),
+      dep("d10", "t7", "t11", "FS", 0),
+      dep("d11", "t11", "t12", "SS", 3),
+      dep("d12", "t10", "t13", "FS", 0),
+      dep("d13", "t12", "t14", "FS", 0),
+      dep("d14", "t13", "t14", "FS", 0),
+      dep("d15", "t3", "t14", "FS", 0),
+      dep("d16", "t14", "t15", "FS", 0)
+    ]
+  };
+}
+
+function task(id, code, name, area, owner, duration, x, y) {
+  return { id, code, name, area, owner, duration, progress: 0, x, y };
+}
+
+function dep(id, from, to, type, lag) {
+  return { id, from, to, type, lag };
+}
+
+function render() {
+  schedule = calculateSchedule(state.tasks, state.dependencies);
+  els.search.value = state.search || "";
+  els.relationType.value = state.relationType || "FS";
+  els.lagDays.value = state.lagDays || 0;
+
+  document.querySelectorAll(".tab").forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.view === state.view);
+  });
+  document.querySelectorAll(".view").forEach((view) => {
+    view.classList.toggle("active", view.id === `${state.view}View`);
+  });
+
+  els.linkMode.classList.toggle("active", state.linkMode);
+
+  renderMetrics();
+  renderFilters();
+  renderFocus();
+  renderNetwork();
+  renderGantt();
+  renderTable();
+  renderInspector();
+
+  if (state.linkMode && state.linkSource) {
+    const source = getTask(state.linkSource);
+    setStatus(`${source.code} から接続中`, "warn");
+  } else if (state.linkMode) {
+    setStatus("依存線モード", "warn");
+  } else {
+    setStatus("Ready");
+  }
+}
+
+function renderMetrics() {
+  const criticalCount = [...schedule.items.values()].filter((item) => item.critical).length;
+  const metrics = [
+    [`${schedule.duration}日`, "計算工期"],
+    [state.tasks.length, "タスク"],
+    [state.dependencies.length, "依存線"],
+    [criticalCount, "クリティカル"]
+  ];
+
+  els.metrics.innerHTML = metrics
+    .map(([value, label]) => `<div class="metric"><strong>${escapeHtml(value)}</strong><span>${label}</span></div>`)
+    .join("");
+}
+
+function renderFilters() {
+  const buttons = [
+    ["all", "すべて", state.tasks.length],
+    ...AREAS.map((area) => [area, area, state.tasks.filter((taskItem) => taskItem.area === area).length])
+  ];
+
+  els.filters.innerHTML = buttons
+    .map(([area, label, count]) => `
+      <button class="chip ${state.area === area ? "active" : ""}" data-area="${area}">
+        <span>${escapeHtml(label)}</span>
+        <span class="badge">${count}</span>
+      </button>
+    `)
+    .join("");
+}
+
+function renderFocus() {
+  const items = state.tasks
+    .map((taskItem) => ({ task: taskItem, data: schedule.items.get(taskItem.id) }))
+    .filter((item) => item.data?.critical || item.data?.float <= 3)
+    .sort((a, b) => a.data.float - b.data.float)
+    .slice(0, 5);
+
+  els.focusList.innerHTML = items
+    .map(({ task: taskItem, data }) => `
+      <button class="focus-item" data-id="${taskItem.id}">
+        <strong>${escapeHtml(taskItem.code)} ${escapeHtml(taskItem.name)}</strong>
+        <span>${data.critical ? "Critical" : `Float ${Math.round(data.float)}日`} · ${escapeHtml(taskItem.owner)}</span>
+      </button>
+    `)
+    .join("");
+
+  els.focusList.querySelectorAll("[data-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.selected = button.dataset.id;
+      saveState();
+      render();
+    });
+  });
+}
+
+function renderNetwork() {
+  const visible = visibleTasks();
+  const visibleIds = new Set(visible.map((taskItem) => taskItem.id));
+  renderEdges(visibleIds);
+
+  els.nodes.innerHTML = visible
+    .map((taskItem) => {
+      const data = schedule.items.get(taskItem.id);
+      return `
+        <article class="node ${taskItem.id === state.selected ? "selected" : ""} ${data.critical ? "critical" : ""} ${taskItem.id === state.linkSource ? "link-source" : ""}"
+          data-id="${taskItem.id}" style="left:${taskItem.x}px;top:${taskItem.y}px">
+          <div class="node-head">
+            <span class="node-code">${escapeHtml(taskItem.code)}</span>
+            <span class="node-area">${escapeHtml(taskItem.area)}</span>
+          </div>
+          <div class="node-name">${escapeHtml(taskItem.name)}</div>
+          <div class="node-meta">
+            <span>${taskItem.duration}日</span>
+            <span>${data.critical ? "Critical" : `Float ${Math.round(data.float)}日`}</span>
+          </div>
+          <div class="progress"><span style="width:${taskItem.progress}%"></span></div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderEdges(visibleIds) {
+  const map = new Map(state.tasks.map((taskItem) => [taskItem.id, taskItem]));
+  const width = 1350;
+  const height = 820;
+  els.edges.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+  const defs = `
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#708079"></path>
+      </marker>
+      <marker id="arrowCritical" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#b74645"></path>
+      </marker>
+    </defs>
+  `;
+
+  const visibleDeps = state.dependencies.filter((item) => visibleIds.has(item.from) && visibleIds.has(item.to));
+  const portMeta = buildEdgePortMeta(visibleDeps);
+
+  const paths = visibleDeps
+    .map((item, index) => {
+      const from = map.get(item.from);
+      const to = map.get(item.to);
+      const fromData = schedule.items.get(item.from);
+      const toData = schedule.items.get(item.to);
+      const meta = portMeta.get(item.id);
+      const forward = to.x >= from.x;
+      const x1 = forward ? from.x + NODE_W : from.x;
+      const x2 = forward ? to.x : to.x + NODE_W;
+      const y1 = from.y + NODE_H / 2 + meta.fromOffset;
+      const y2 = to.y + NODE_H / 2 + meta.toOffset;
+      const direction = forward ? 1 : -1;
+      const routeOffset = ((index % 7) - 3) * 18;
+      const distanceX = Math.abs(x2 - x1);
+      const bend = routeOffset * Math.min(1, distanceX / 220);
+      const dx = Math.max(28, Math.min(110, distanceX * 0.42));
+      const c1x = x1 + direction * dx;
+      const c2x = x2 - direction * dx;
+      const c1y = y1 + bend;
+      const c2y = y2 - bend;
+      const critical = fromData.critical && toData.critical && Math.abs(toData.es - (fromData.es + dependencyOffset(item, from, to))) < 0.001;
+      const label = `${item.type}${item.lag ? item.lag > 0 ? `+${item.lag}` : item.lag : ""}`;
+      const labelX = (x1 + x2) / 2;
+      const labelY = (y1 + y2) / 2 + bend * 0.45 - 8;
+
+      return `
+        <path class="edge ${critical ? "critical" : ""}" d="M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}" marker-end="url(#${critical ? "arrowCritical" : "arrow"})"></path>
+        <text class="edge-label" x="${labelX}" y="${labelY}">${label}</text>
+      `;
+    })
+    .join("");
+
+  els.edges.innerHTML = defs + paths;
+}
+
+function buildEdgePortMeta(dependencies) {
+  const outgoing = new Map();
+  const incoming = new Map();
+
+  dependencies.forEach((item) => {
+    if (!outgoing.has(item.from)) outgoing.set(item.from, []);
+    if (!incoming.has(item.to)) incoming.set(item.to, []);
+    outgoing.get(item.from).push(item);
+    incoming.get(item.to).push(item);
+  });
+
+  const meta = new Map();
+  outgoing.forEach((items) => {
+    const sorted = items.slice().sort((a, b) => {
+      const aTarget = getTask(a.to);
+      const bTarget = getTask(b.to);
+      return (aTarget?.y || 0) - (bTarget?.y || 0);
+    });
+    sorted.forEach((item, index) => {
+      const spread = (index - (sorted.length - 1) / 2) * 18;
+      meta.set(item.id, { ...(meta.get(item.id) || {}), fromOffset: spread });
+    });
+  });
+
+  incoming.forEach((items) => {
+    const sorted = items.slice().sort((a, b) => {
+      const aSource = getTask(a.from);
+      const bSource = getTask(b.from);
+      return (aSource?.y || 0) - (bSource?.y || 0);
+    });
+    sorted.forEach((item, index) => {
+      const spread = (index - (sorted.length - 1) / 2) * 18;
+      meta.set(item.id, { ...(meta.get(item.id) || {}), toOffset: spread });
+    });
+  });
+
+  dependencies.forEach((item) => {
+    meta.set(item.id, {
+      fromOffset: 0,
+      toOffset: 0,
+      ...(meta.get(item.id) || {})
+    });
+  });
+
+  return meta;
+}
+
+function renderGantt() {
+  const tasks = visibleTasks().slice().sort((a, b) => schedule.items.get(a.id).es - schedule.items.get(b.id).es);
+  const days = Math.max(42, schedule.duration + 14);
+  const timelineWidth = days * DAY_W;
+  const ticks = [];
+
+  for (let day = 0; day <= days; day += 7) {
+    ticks.push(`<div class="tick" style="left:${day * DAY_W}px"><span>D+${day}</span></div>`);
+  }
+
+  els.gantt.innerHTML = `
+    <div class="gantt-chart" style="width:${timelineWidth + 300}px">
+      <div class="gantt-head">
+        <div class="gantt-label"><strong>タスク</strong></div>
+        <div class="gantt-scale" style="width:${timelineWidth}px">${ticks.join("")}</div>
+      </div>
+      ${tasks.map((taskItem) => {
+        const data = schedule.items.get(taskItem.id);
+        return `
+          <div class="gantt-row">
+            <div class="gantt-label">
+              <strong>${escapeHtml(taskItem.code)} ${escapeHtml(taskItem.name)}</strong>
+              <span>${escapeHtml(taskItem.area)} · ${escapeHtml(taskItem.owner)}</span>
+            </div>
+            <div class="gantt-line" style="width:${timelineWidth}px">
+              <div class="bar ${data.critical ? "critical" : ""}" style="left:${data.es * DAY_W}px;width:${taskItem.duration * DAY_W}px"></div>
+            </div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderTable() {
+  els.taskTable.innerHTML = visibleTasks()
+    .map((taskItem) => {
+      const data = schedule.items.get(taskItem.id);
+      return `
+        <tr class="${taskItem.id === state.selected ? "selected" : ""}" data-id="${taskItem.id}">
+          <td><input data-field="code" value="${escapeAttr(taskItem.code)}"></td>
+          <td><input data-field="name" value="${escapeAttr(taskItem.name)}"></td>
+          <td><select data-field="area">${AREAS.map((area) => `<option ${area === taskItem.area ? "selected" : ""}>${area}</option>`).join("")}</select></td>
+          <td><input data-field="duration" type="number" min="1" value="${taskItem.duration}"></td>
+          <td><input data-field="progress" type="number" min="0" max="100" value="${taskItem.progress}"></td>
+          <td>${predecessorCodes(taskItem.id).join(", ") || "-"}</td>
+          <td>${data.critical ? "Critical" : `${Math.round(data.float)}日`}</td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+function renderInspector() {
+  const selected = getTask(state.selected);
+  if (!selected) {
+    els.inspector.innerHTML = `<section><div class="eyebrow">DETAIL</div><p>タスクを選択</p></section>`;
+    return;
+  }
+
+  const data = schedule.items.get(selected.id);
+  els.inspector.innerHTML = `
+    <section>
+      <div class="eyebrow">DETAIL</div>
+      <h2>${escapeHtml(selected.code)} ${escapeHtml(selected.name)}</h2>
+      <div class="field-grid">
+        <label class="wide">タスク名
+          <input data-inspector="name" value="${escapeAttr(selected.name)}">
+        </label>
+        <label>コード
+          <input data-inspector="code" value="${escapeAttr(selected.code)}">
+        </label>
+        <label>領域
+          <select data-inspector="area">${AREAS.map((area) => `<option ${area === selected.area ? "selected" : ""}>${area}</option>`).join("")}</select>
+        </label>
+        <label>担当
+          <input data-inspector="owner" value="${escapeAttr(selected.owner)}">
+        </label>
+        <label>期間
+          <input data-inspector="duration" type="number" min="1" value="${selected.duration}">
+        </label>
+        <label>進捗
+          <input data-inspector="progress" type="number" min="0" max="100" value="${selected.progress}">
+        </label>
+      </div>
+      <p class="note">${data.critical ? "クリティカルタスク" : `余裕 ${Math.round(data.float)}日`}</p>
+    </section>
+  `;
+}
+
+function onNodeClick(id) {
+  if (!state.linkMode) {
+    state.selected = id;
+    saveState();
+    render();
+    return;
+  }
+
+  if (!state.linkSource || state.linkSource === id) {
+    state.linkSource = state.linkSource === id ? null : id;
+    state.selected = id;
+    saveState();
+    render();
+    return;
+  }
+
+  const nextDeps = [
+    ...state.dependencies,
+    dep(`d${Date.now()}`, state.linkSource, id, state.relationType, clamp(parseInt(state.lagDays, 10), -30, 90, 0))
+  ];
+
+  if (hasCycle(state.tasks, nextDeps)) {
+    setStatus("循環依存になるため接続できません", "error");
+    return;
+  }
+
+  const existing = state.dependencies.find((item) => item.from === state.linkSource && item.to === id);
+  if (existing) {
+    existing.type = state.relationType;
+    existing.lag = state.lagDays;
+  } else {
+    state.dependencies = nextDeps;
+  }
+
+  state.selected = id;
+  saveState();
+  render();
+}
+
+function startDrag(event) {
+  const node = event.target.closest(".node");
+  if (!node || state.linkMode) return;
+  const taskItem = getTask(node.dataset.id);
+  drag = {
+    id: taskItem.id,
+    node,
+    sx: event.clientX,
+    sy: event.clientY,
+    ox: taskItem.x,
+    oy: taskItem.y,
+    moved: false
+  };
+  node.setPointerCapture(event.pointerId);
+  document.addEventListener("pointermove", moveDrag);
+  document.addEventListener("pointerup", endDrag, { once: true });
+}
+
+function moveDrag(event) {
+  if (!drag) return;
+  const taskItem = getTask(drag.id);
+  const dx = event.clientX - drag.sx;
+  const dy = event.clientY - drag.sy;
+  if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
+  taskItem.x = clamp(drag.ox + dx, 8, 1150, drag.ox);
+  taskItem.y = clamp(drag.oy + dy, 8, 700, drag.oy);
+  drag.node.style.left = `${taskItem.x}px`;
+  drag.node.style.top = `${taskItem.y}px`;
+  renderEdges(new Set(visibleTasks().map((task) => task.id)));
+}
+
+function endDrag() {
+  if (drag?.moved) {
+    skipClick = true;
+    setTimeout(() => {
+      skipClick = false;
+    }, 0);
+    saveState();
+  }
+  document.removeEventListener("pointermove", moveDrag);
+  drag = null;
+}
+
+function onTableChange(event) {
+  const row = event.target.closest("[data-id]");
+  if (!row) return;
+  updateTask(row.dataset.id, event.target.dataset.field, event.target.value);
+}
+
+function onInspectorChange(event) {
+  const field = event.target.dataset.inspector;
+  if (!field) return;
+  updateTask(state.selected, field, event.target.value);
+}
+
+function updateTask(id, field, value) {
+  const taskItem = getTask(id);
+  if (!taskItem) return;
+  if (field === "duration") taskItem.duration = clamp(parseInt(value, 10), 1, 365, taskItem.duration);
+  else if (field === "progress") taskItem.progress = clamp(parseInt(value, 10), 0, 100, taskItem.progress);
+  else taskItem[field] = String(value).trim() || taskItem[field];
+  state.selected = id;
+  saveState();
+  render();
+}
+
+function addTask() {
+  const id = `t${Date.now()}`;
+  const taskItem = task(id, `N${state.tasks.length + 1}`, "新規タスク", state.area === "all" ? "Engineering" : state.area, "", 5, 80, 120);
+  state.tasks.push(taskItem);
+  state.selected = id;
+  saveState();
+  render();
+}
+
+function autoLayout() {
+  const byArea = new Map();
+  const sorted = state.tasks.slice().sort((a, b) => schedule.items.get(a.id).es - schedule.items.get(b.id).es);
+  sorted.forEach((taskItem) => {
+    const lane = byArea.get(taskItem.area) || 0;
+    byArea.set(taskItem.area, lane + 1);
+    const areaIndex = AREAS.indexOf(taskItem.area);
+    taskItem.x = 40 + Math.min(5, Math.floor(schedule.items.get(taskItem.id).es / 20)) * 235;
+    taskItem.y = 70 + areaIndex * 145 + (lane % 2) * 24;
+  });
+}
+
+function calculateSchedule(tasks, dependencies) {
+  const map = new Map(tasks.map((taskItem) => [taskItem.id, taskItem]));
+  const items = new Map(tasks.map((taskItem) => [taskItem.id, { es: 0, ef: taskItem.duration, ls: 0, lf: 0, float: 0, critical: false }]));
+  const outgoing = new Map(tasks.map((taskItem) => [taskItem.id, []]));
+  const indegree = new Map(tasks.map((taskItem) => [taskItem.id, 0]));
+
+  for (const item of dependencies) {
+    if (!map.has(item.from) || !map.has(item.to)) continue;
+    outgoing.get(item.from).push(item);
+    indegree.set(item.to, indegree.get(item.to) + 1);
+  }
+
+  const queue = tasks.filter((taskItem) => indegree.get(taskItem.id) === 0).map((taskItem) => taskItem.id);
+  const topo = [];
+  while (queue.length) {
+    const id = queue.shift();
+    topo.push(id);
+    for (const item of outgoing.get(id)) {
+      indegree.set(item.to, indegree.get(item.to) - 1);
+      if (indegree.get(item.to) === 0) queue.push(item.to);
+    }
+  }
+
+  for (const id of topo) {
+    const from = map.get(id);
+    const fromItem = items.get(id);
+    fromItem.ef = fromItem.es + from.duration;
+    for (const item of outgoing.get(id)) {
+      const to = map.get(item.to);
+      const toItem = items.get(item.to);
+      toItem.es = Math.max(toItem.es, fromItem.es + dependencyOffset(item, from, to));
+    }
+  }
+
+  for (const taskItem of tasks) {
+    const item = items.get(taskItem.id);
+    item.ef = item.es + taskItem.duration;
+  }
+
+  const duration = Math.max(0, ...[...items.values()].map((item) => item.ef));
+
+  for (const taskItem of tasks) {
+    const item = items.get(taskItem.id);
+    item.ls = duration - taskItem.duration;
+    item.lf = duration;
+  }
+
+  for (const id of topo.slice().reverse()) {
+    const from = map.get(id);
+    const fromItem = items.get(id);
+    for (const item of outgoing.get(id)) {
+      const to = map.get(item.to);
+      const toItem = items.get(item.to);
+      fromItem.ls = Math.min(fromItem.ls, toItem.ls - dependencyOffset(item, from, to));
+    }
+    fromItem.lf = fromItem.ls + from.duration;
+    fromItem.float = fromItem.ls - fromItem.es;
+    fromItem.critical = fromItem.float <= 0.001;
+  }
+
+  return { items, duration };
+}
+
+function dependencyOffset(item, from, to) {
+  const lag = Number(item.lag) || 0;
+  if (item.type === "SS") return lag;
+  if (item.type === "FF") return from.duration + lag - to.duration;
+  if (item.type === "SF") return lag - to.duration;
+  return from.duration + lag;
+}
+
+function hasCycle(tasks, dependencies) {
+  const ids = new Set(tasks.map((taskItem) => taskItem.id));
+  const outgoing = new Map(tasks.map((taskItem) => [taskItem.id, []]));
+  const indegree = new Map(tasks.map((taskItem) => [taskItem.id, 0]));
+  dependencies.forEach((item) => {
+    if (!ids.has(item.from) || !ids.has(item.to)) return;
+    outgoing.get(item.from).push(item.to);
+    indegree.set(item.to, indegree.get(item.to) + 1);
+  });
+  const queue = tasks.filter((taskItem) => indegree.get(taskItem.id) === 0).map((taskItem) => taskItem.id);
+  let visited = 0;
+  while (queue.length) {
+    const id = queue.shift();
+    visited += 1;
+    outgoing.get(id).forEach((to) => {
+      indegree.set(to, indegree.get(to) - 1);
+      if (indegree.get(to) === 0) queue.push(to);
+    });
+  }
+  return visited !== tasks.length;
+}
+
+function visibleTasks() {
+  const q = (state.search || "").toLowerCase();
+  return state.tasks.filter((taskItem) => {
+    const areaOk = state.area === "all" || taskItem.area === state.area;
+    const text = `${taskItem.code} ${taskItem.name} ${taskItem.owner} ${taskItem.area}`.toLowerCase();
+    return areaOk && (!q || text.includes(q));
+  });
+}
+
+function predecessorCodes(id) {
+  return state.dependencies
+    .filter((item) => item.to === id)
+    .map((item) => getTask(item.from)?.code)
+    .filter(Boolean);
+}
+
+function getTask(id) {
+  return state.tasks.find((taskItem) => taskItem.id === id);
+}
+
+function setStatus(text, type = "") {
+  els.status.textContent = text;
+  els.status.className = `status ${type}`.trim();
+}
+
+function clamp(value, min, max, fallback) {
+  return Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function escapeAttr(value) {
+  return escapeHtml(value);
+}
