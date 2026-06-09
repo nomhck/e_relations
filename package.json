@@ -1,0 +1,9 @@
+{
+  "name": "e-relations",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node server/dev-server.js",
+    "check": "node --check server/dev-server.js && node --check api/handlers/plans.js && node --check api/lib/storage.local.js && node --check web/app.js"
+  }
+}
