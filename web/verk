@@ -1,0 +1,697 @@
+# Relation Tool v2.1 — 技術仕様書（AI読み込み用）
+
+> **目的**: 生成AIがコードの読み込み・修正・拡張を行う際のコンテキストとして使用する仕様書。
+> **対象ファイル**: `index_dev_a_patched.html`（シングルHTMLファイル、約275KB）
+> **技術スタック**: HTML5 + CSS3 + Vanilla JavaScript（ES6+）、フレームワーク不使用
+> **最終更新**: 2026-06-10
+
+---
+
+## 0. 読み方ガイド（AIへの指示）
+
+- 本仕様書は「データモデル → 状態管理 → 関数マップ → UI構造 → 機能要件 → 制約」の順で構造化されている
+- コード修正時は「§3 関数マップ」で対象関数を特定し、「§5 機能要件」で仕様を確認すること
+- 新機能追加時は「§1 データモデル」のスキーマ拡張 → 「§2 状態管理」の変数追加 → 関数実装の順で進めること
+- `localStorage` キーは `§7 永続化` を参照。キー名の衝突に注意すること
+
+---
+
+## 1. データモデル
+
+### 1.1 Task（ノード）
+
+```typescript
+interface Task {
+  id: string;             // 内部UUID（uid()で生成: Date.now().toString(36) + Math.random()...）
+  dbId?: string;          // 外部識別キー。形式: "{所属名}_{連番}"。インポート/エクスポートで使用
+  title: string;          // タスク名。必須。最大60文字
+  desc: string;           // 説明。任意。最大200文字
+  status: "todo" | "doing" | "done";  // 手動設定のステータス。デフォルト: "todo"
+  affiliationId: string;  // 所属マスターのID参照。空文字=""で未所属
+  level: "lv1" | "lv2" | "lv3" | "lv4";  // 重要度。デフォルト: "lv4"
+  plannedStart: string | null;  // "YYYY-MM-DD" or null
+  plannedEnd: string | null;
+  actualStart: string | null;
+  actualEnd: string | null;
+  x: number;              // キャンバス座標X
+  y: number;              // キャンバス座標Y
+}
+```
+
+**マイグレーション規則**（load()内で適用）:
+- `"Level_1"` → `"lv1"`, `"Level_2"` → `"lv2"`, `"Level_3"` → `"lv4"`
+- `level`が未定義 or 不正値 → `"lv4"`
+- `plannedStart/End`, `actualStart/End`が`undefined` → `null`
+
+### 1.2 Relation（エッジ）
+
+```typescript
+interface Relation {
+  from: string;   // 接続元ノードの Task.id
+  to: string;     // 接続先ノードの Task.id
+  label?: string; // エッジラベル（情報種類）。最大30文字
+}
+```
+
+**制約**:
+- DAG必須: `from → to` でサイクルが発生する接続は禁止（`wouldCreateCycle()` でBFS検証）
+- 重複禁止: 同一 `{from, to}` ペアは1つのみ
+- 自己ループ禁止: `from === to` は不可
+
+### 1.3 Affiliation（所属）
+
+```typescript
+interface Affiliation {
+  id: string;     // 内部UUID
+  name: string;   // 所属名。最大30文字。重複不可
+  color: string;  // HEXカラーコード。AFFIL_COLORSパレットから自動割当
+}
+```
+
+**カラーパレット**（AFFIL_COLORS定数）:
+```javascript
+['#7c3aed','#2563eb','#059669','#d97706','#dc2626','#db2777','#0891b2','#6d28d9','#0d9488','#b45309','#be185d','#4f46e5']
+```
+
+### 1.4 Computed Status（算出ステータス）
+
+`computeTaskStatus(task, referenceDate)` で算出:
+
+| 算出値 | 条件 | 色コード |
+|---|---|---|
+| `todo` | status=todo かつ遅延なし | `#6b7280` |
+| `delayStart` | status=todo かつ plannedStart < referenceDate | `#f59e0b` |
+| `doing` | status=doing かつ遅延なし | `#3b82f6` |
+| `delayEnd` | status=doing かつ plannedEnd < referenceDate | `#ef4444` |
+| `done` | status=done | `#22c55e` |
+
+追加フラグ: `lateStart`（actualStart > plannedStart）, `lateEnd`（actualEnd > plannedEnd）
+
+---
+
+## 2. 状態管理（グローバル変数）
+
+### 2.1 コアデータ
+```javascript
+let tasks        = [];  // Task[]
+let relations    = [];  // Relation[]
+let affiliations = [];  // Affiliation[]
+```
+
+### 2.2 隣接リスト（rebuildAdjList()で再構築）
+```javascript
+let adjOut  = {};  // { [nodeId]: childId[] }  — 出力方向
+let adjIn   = {};  // { [nodeId]: parentId[] } — 入力方向
+let taskMap = new Map();  // Map<nodeId, Task>
+```
+
+### 2.3 UIモード状態
+```javascript
+let connectMode    = false;   // 接続モード ON/OFF
+let connectSource  = null;    // 接続元に選択されたノードID
+let pendingEdge    = null;    // 確認待ちのエッジ {from, to}
+let selectedTaskId = null;    // 詳細ダイアログで選択中のノードID
+let dragging       = null;    // ドラッグ中のノード情報
+
+let highlightMode  = false;   // ハイライトモード ON/OFF
+let hlFocusNodes   = new Set();   // ハイライト対象ノードID集合
+let hlFocusEdges   = new Set();   // ハイライト対象エッジキー集合（"fromId-toId"）
+let hlDepths       = new Map();   // Map<nodeId, depth>（負=祖先, 0=選択, 正=子孫）
+let hlLocked       = false;       // ハイライトロック状態
+
+let affilZoneMode  = true;    // 所属ゾーン表示 ON/OFF（デフォルトON）
+let levelEditMode  = false;   // レベル指定モード ON/OFF
+let levelFilter    = null;    // null=全表示 / 1~3=しきい値
+
+let analysisMode   = false;   // 分析モード ON/OFF（※暗黙: toggleAnalysisMode()内で管理）
+```
+
+### 2.4 ビュー状態
+```javascript
+let zoom = 1.0, panX = 0, panY = 0;  // キャンバスのズーム・パン
+const ZOOM_MIN = 0.2, ZOOM_MAX = 4.0;
+
+let visibleAffils    = new Set();     // 所属フィルター: 表示対象の所属ID集合
+let virtualEdgesCache = null;         // レベルフィルター時の仮想エッジキャッシュ
+let generationsCache  = null;         // 世代計算キャッシュ
+let mainZoneLayout    = null;         // 所属ゾーン背景描画用メタ情報
+```
+
+### 2.5 キャッシュ・パフォーマンス
+```javascript
+let nodeEls    = new Map();  // Map<nodeId, {el, w, h, hash}> — DOM要素キャッシュ
+let saveTimer  = null;       // 保存デバウンスタイマー（500ms）
+let _bcCache   = null;       // 媒介中心性キャッシュ
+let _bcCacheKey = null;      // キャッシュキー（"ノード数:エッジ数"）
+```
+
+---
+
+## 3. 関数マップ（203関数）
+
+### 3.1 ライフサイクル
+| 関数 | 役割 |
+|---|---|
+| `init()` | アプリ初期化: load → rebuildAdjList → renderAll → テーマ復元 |
+| `load()` | localStorage からデータ読み込み + マイグレーション |
+| `save()` | localStorage へデータ保存（500msデバウンス） |
+| `uid()` | UUID生成: `Date.now().toString(36) + Math.random().toString(36).slice(2,7)` |
+
+### 3.2 ノードCRUD
+| 関数 | 役割 |
+|---|---|
+| `addTask(event)` | フォームからノード追加。x/yはランダム配置 |
+| `deleteSelectedTask()` | 選択ノードを削除（カスケードでエッジも削除） |
+| `openDetail(taskId)` | ノード詳細ダイアログを開く |
+| `saveDetail()` | 詳細ダイアログの変更を保存 |
+| `closeDetail()` | 詳細ダイアログを閉じる |
+| `computeTaskStatus(task, refDate)` | 日程から計算ステータスを算出 |
+| `getTaskDisplayStatus(task)` | 表示用ステータス（色・ラベル）を返す |
+| `generateDbId(affilName)` | DB IDを「所属名_連番」形式で生成 |
+| `ensureAllDbIds()` | 全ノードにDB IDを一括採番 |
+
+### 3.3 リレーション管理
+| 関数 | 役割 |
+|---|---|
+| `toggleConnectMode()` | 接続モードのON/OFF切替 |
+| `confirmEdge()` | エッジ作成の確認・実行 |
+| `cancelEdge()` | エッジ作成のキャンセル |
+| `wouldCreateCycle(from, to)` | サイクル検出（BFS） |
+| `clearRelations()` | 全リレーション削除 |
+| `openEdgeDetail(from, to)` | エッジ詳細ダイアログを開く |
+| `saveEdgeDetail()` | エッジ詳細を保存 |
+| `deleteEdgeFromDetail()` | エッジ詳細から削除 |
+
+### 3.4 所属管理
+| 関数 | 役割 |
+|---|---|
+| `addAffiliation()` | 所属追加 |
+| `deleteAffiliation(id)` | 所属削除 |
+| `startAffilRename(id)` | 所属名インライン編集開始 |
+| `setupAffilDrag()` | ドラッグ並べ替えのイベント設定 |
+| `renderAffilSection()` | 所属セクションの再描画 |
+
+### 3.5 グラフアルゴリズム
+| 関数 | 役割 | 計算量 |
+|---|---|---|
+| `rebuildAdjList()` | 隣接リスト再構築 | O(V+E) |
+| `computeGenerations()` | 世代番号計算（トポロジカル順） | O(V+E) |
+| `getGenerations()` | 世代番号取得（キャッシュ付き） | O(1)〜O(V+E) |
+| `findCriticalPath()` | 最長パス探索（DAG上の動的計画法） | O(V+E) |
+| `topologicalSort()` | トポロジカルソート | O(V+E) |
+| `computeDegreeCentrality()` | 次数中心性算出 | O(V) |
+| `computeBetweennessCentrality()` | 媒介中心性算出（Brandes） | O(V×E)、V>200でスキップ |
+| `detectBottlenecks()` | ボトルネック検出（入次数×出次数） | O(V) |
+| `detectAllCycles()` | カーンのアルゴリズムで全体サイクル検出 | O(V+E) |
+| `computeVirtualEdges()` | レベルフィルター時の仮想エッジ算出 | O(V+E) |
+| `findConnectedComponents()` | 連結成分検出（無向グラフとして） | O(V+E) |
+| `detectSpecialNodes()` | ルート/リーフ/孤立ノード検出 | O(V) |
+| `computeImpact(nodeId)` | ノードの影響範囲（子孫数）計算 | O(V+E) |
+
+### 3.6 レンダリング
+| 関数 | 役割 |
+|---|---|
+| `renderAll()` | 全UI再描画のエントリポイント |
+| `renderNodes()` | ノードDOM要素の差分レンダリング |
+| `renderEdges()` | Canvas上のエッジ描画 |
+| `renderSidebar()` | サイドバー（タスク一覧）再描画 |
+| `renderFilterBar()` | フィルターバー再描画 |
+| `renderConnectPanels()` | 接続モードパネル再描画 |
+| `renderRelationsList()` | リレーション一覧再描画 |
+| `drawMainZones()` | 所属ゾーン背景描画（Canvas） |
+| `buildNodeHtml(task)` | ノードのHTML文字列生成 |
+| `createNodeEl(task)` | ノードDOM要素の新規作成 |
+| `updateNodeEl(task)` | ノードDOM要素の差分更新 |
+| `getNodeContentHash(task)` | ノードのコンテンツハッシュ算出（差分判定用） |
+| `isNodeInViewport(task)` | ビューポート内判定 |
+
+### 3.7 キャンバス操作
+| 関数 | 役割 |
+|---|---|
+| `updateTransform()` | CSS transform更新（zoom/pan反映） |
+| `fitView()` | 全ノードがビューポートに収まるよう調整 |
+| `autoLayout()` | 自動整列（世代×所属ゾーン） |
+| `startDrag(task, event)` | ノードドラッグ開始 |
+
+### 3.8 ハイライト
+| 関数 | 役割 |
+|---|---|
+| `toggleHighlightMode()` | ハイライトモードON/OFF |
+| `applyHighlight(nodeId)` | BFS探索でフォーカスノード集合を構築 |
+| `applyHighlightClasses()` | ノードにハイライトCSSクラスを適用 |
+| `clearHighlight()` | ハイライト状態をクリア |
+| `highlightNodeSet(nodeIds)` | 指定ノード集合をハイライト（分析パネルから使用） |
+| `highlightCriticalPath()` | クリティカルパスをハイライト |
+
+### 3.9 フィルタリング
+| 関数 | 役割 |
+|---|---|
+| `toggleAffilFilter(affilId)` | 所属フィルターの切替 |
+| `clearAffilFilter()` | 所属フィルターをクリア |
+| `applyGenFilter()` | 世代フィルターを適用 |
+| `clearGenFilter()` | 世代フィルターをクリア |
+| `isTaskVisible(task)` | ノードの表示/非表示判定 |
+| `setLevelFilter(level)` | レベルフィルターを設定 |
+
+### 3.10 ビュー（3D / 断面 / サブグラフ）
+| 関数 | 役割 |
+|---|---|
+| `open3dView()` / `close3dView()` | 3Dビューの開閉 |
+| `render3dView()` | 3Dビューの描画 |
+| `v3dProject(x, y, z, ...)` | 3D→2D投影変換 |
+| `openSectionView(affilId)` / `closeSectionView()` | 断面ビューの開閉 |
+| `renderSectionView()` | 断面ビューの描画 |
+| `openSubgraph(fromId, toId)` / `closeSubgraph()` | サブグラフビューの開閉 |
+| `renderSubgraph()` | サブグラフビューの描画 |
+| `getSubGraphData(fromId, toId)` | 2ノード間の中間経路データ取得 |
+
+### 3.11 インポート / エクスポート
+| 関数 | 役割 |
+|---|---|
+| `openImportDialog()` / `closeImportDialog()` | インポートダイアログ開閉 |
+| `processImportFile(file)` | ファイル解析（CSV/Excel） |
+| `importNodesFromRows(rows)` | 行データからノードをインポート |
+| `importEdgesFromRows(rows)` | 行データからエッジをインポート |
+| `executeImport()` | インポート実行 |
+| `parseCSV(text)` | CSVパーサー（クォート対応） |
+| `loadSheetJS()` | SheetJSの遅延ロード（CDN） |
+| `openExportDialog()` / `closeExportDialog()` | エクスポートダイアログ開閉 |
+| `exportNodesCSV()` | ノードCSV出力 |
+| `exportEdgesCSV()` | エッジCSV出力 |
+| `exportAnalysisCSV()` | 分析結果CSV出力 |
+| `downloadCSV(csvText, filename)` | CSVダウンロード（BOM付きUTF-8） |
+
+### 3.12 テーマ
+| 関数 | 役割 |
+|---|---|
+| `applyTheme(name)` | カラーテーマ適用（CSS変数更新） |
+| `applyCanvasStyle(style)` | Light/Dark切替 |
+
+### 3.13 分析
+| 関数 | 役割 |
+|---|---|
+| `toggleAnalysisMode()` | 分析モードON/OFF |
+| `renderStatsPanel()` | 統計ダッシュボード描画 |
+| `renderAnalysisPanel()` | 構造分析パネル描画 |
+| `computeBasicStats()` | 基本統計算出（ノード数/エッジ数/密度/平均次数等） |
+| `computeDistributions()` | 世代別/所属別/ステータス別分布算出 |
+| `computeScheduleCoverage()` | 日程カバレッジ算出 |
+| `computeDelayList()` | 遅延タスクリスト算出 |
+| `computeEdgeLabelDistribution()` | エッジラベル分布算出 |
+| `_renderTabCentrality(cont)` | 中心性タブ描画 |
+| `_renderTabCriticalPath(cont)` | CPタブ描画 |
+| `_renderTabBottleneck(cont)` | ボトルネックタブ描画 |
+| `_renderTabTopological(cont)` | トポロジカル順序タブ描画 |
+| `_renderTabEdgeLabel(cont)` | 情報種類タブ描画 |
+| `_renderTabSchedule(cont)` | スケジュールタブ描画 |
+
+### 3.14 エッジラベルマスター
+| 関数 | 役割 |
+|---|---|
+| `getEdgeLabelMaster()` | マスターリスト取得（使用中 + カスタム） |
+| `getEdgeLabelFrequency()` | ラベル使用頻度集計 |
+| `addToEdgeLabelMaster(label)` | カスタムラベル追加 |
+| `removeFromEdgeLabelMaster(label)` | カスタムラベル削除 |
+| `refreshEdgeLabelDatalist()` | datalist要素の更新 |
+| `renderEdgeLabelMaster()` | マスターリストUI描画 |
+
+### 3.15 ユーティリティ
+| 関数 | 役割 |
+|---|---|
+| `safeGetItem(key)` | localStorage.getItem のtry-catchラッパー |
+| `safeSetItem(key, value)` | localStorage.setItem のtry-catchラッパー |
+| `safeRemoveItem(key)` | localStorage.removeItem のtry-catchラッパー |
+| `showAlert(msg)` | カスタムアラートモーダル |
+| `showConfirm(msg, callback)` | カスタム確認モーダル |
+| `escHtml(str)` | HTMLエスケープ |
+| `toCsvField(value)` | CSVフィールドエスケープ |
+| `focusNode(nodeId)` | ノードにフォーカス（ズーム+パン） |
+| `distToSegment(px, py, x1, y1, x2, y2)` | 点からセグメントへの距離計算 |
+
+---
+
+## 4. UI構造（HTML要素マップ）
+
+### 4.1 メインレイアウト
+```
+<body>
+├── #sidebar                    ← 左サイドバー（280px固定幅）
+│   ├── #sidebar-header         ← ロゴ + テーマピッカー
+│   ├── #stats-panel-container  ← 統計ダッシュボード（分析モード時）
+│   ├── #analysis-panel-container ← 構造分析パネル（分析モード時）
+│   ├── #affil-section          ← 所属管理（折りたたみ）
+│   ├── #add-task-form          ← ノード追加フォーム
+│   ├── #connect-panels         ← 接続モードパネル（接続モード時）
+│   ├── #task-list              ← タスク一覧
+│   └── #relations-panel        ← リレーション一覧
+│
+├── #canvas-wrap                ← メインキャンバス領域
+│   ├── #toolbar                ← ツールバー
+│   ├── #filter-bar             ← フィルターバー
+│   ├── #canvas-container       ← キャンバスコンテナ
+│   │   ├── #canvas-inner       ← transform適用コンテナ（ノードDOM配置先）
+│   │   └── #edge-canvas        ← エッジ描画用Canvas
+│   ├── #zoom-label             ← ズーム率表示
+│   └── #mode-text              ← モード表示
+│
+├── #detail-overlay             ← ノード詳細ダイアログ
+├── #edge-detail-overlay        ← エッジ詳細ダイアログ
+├── #edge-label-overlay         ← エッジラベル入力
+├── #import-overlay             ← インポートダイアログ
+├── #export-overlay             ← エクスポートダイアログ
+├── #subgraph-overlay           ← サブグラフビュー
+├── #view3d-overlay             ← 3Dビュー
+├── #section-overlay            ← 断面ビュー
+├── #manual-overlay             ← マニュアル
+├── #modal-overlay              ← カスタムモーダル（alert/confirm）
+├── #rubber-band                ← ラバーバンド選択矩形
+├── #node-tooltip               ← ノードツールチップ
+└── #level-float-panel          ← レベル指定フローティングパネル
+```
+
+### 4.2 ツールバーボタン一覧
+| ボタンID | ラベル | 種類 | 関数 |
+|---|---|---|---|
+| `connect-btn` | 🔗 接続モード | トグル | `toggleConnectMode()` |
+| `level-edit-btn` | ✏ レベル指定 | トグル | `toggleLevelEditMode()` |
+| `lvf-1` / `lvf-2` / `lvf-3` / `lvf-all` | レベル1〜3 / ALL | トグル | `setLevelFilter(n)` |
+| `highlight-btn` | ✦ ハイライト | トグル | `toggleHighlightMode()` |
+| `affil-zone-btn` | ▤ 所属ゾーン | トグル | `toggleAffilZoneMode()` |
+| — | ⬡ 自動整列 | アクション | `autoLayout()` |
+| — | ⊙ 全体表示 | アクション | `fitView()` |
+| `import-btn` | 📥 インポート | アクション | `openImportDialog()` |
+| `export-btn` | 📤 エクスポート | アクション | `openExportDialog()` |
+| `clear-rel-btn` | 🔗 リレーション全削除 | アクション | `clearRelations()` |
+| — | 📖 マニュアル | アクション | `openManual()` |
+| — | 🧊 3Dビュー | アクション | `open3dView()` |
+| `section-menu-btn` | 📐 断面ビュー ▼ | メニュー | `toggleSectionMenu()` |
+| `analysis-btn` | 📊 分析 | トグル | `toggleAnalysisMode()` |
+
+---
+
+## 5. 機能要件（ID付き）
+
+### 5.1 ノード管理
+
+| ID | 要件 | 実装関数 | 検証ポイント |
+|---|---|---|---|
+| FR-N-001 | タスク名（必須・最大60文字）で追加 | `addTask()` | `maxlength="60"`, `required` |
+| FR-N-002 | 説明（任意・最大200文字） | `addTask()` | `maxlength="200"` |
+| FR-N-003 | ステータス: todo/doing/done | `addTask()` | `<select id="task-status-input">` |
+| FR-N-004 | 所属プルダウン選択 | `addTask()`, `populateAffilSelect()` | |
+| FR-N-005 | 日程4項目（折りたたみUI） | `addTask()`, `toggleAddDateSection()` | |
+| FR-N-006 | 配置: キャンバス内ランダム | `addTask()` | `x: 60+Math.random()*...` |
+| FR-N-007 | Enterキーで追加 | HTML `onkeydown` | |
+| FR-N-010 | クリックで詳細ダイアログ | `openDetail()` | |
+| FR-N-011 | 全属性編集可能 | `saveDetail()` | |
+| FR-N-012 | DB ID自動提案 | `generateDbId()` | |
+| FR-N-013 | 所属名変更→DB IDプレフィックス更新 | `startAffilRename()` | |
+| FR-N-014 | 計算ステータス表示 | `updateDetailComputedStatus()` | |
+| FR-N-015 | リレーション情報（親/子一覧） | `renderDetailRelInfo()` | |
+| FR-N-020 | 削除確認ダイアログ | `showConfirm()` | |
+| FR-N-021 | カスケード削除（エッジも） | `deleteSelectedTask()` | |
+
+### 5.2 リレーション管理
+
+| ID | 要件 | 実装関数 | 検証ポイント |
+|---|---|---|---|
+| FR-R-001 | 接続モード（サイドバーパネル） | `toggleConnectMode()`, `renderConnectPanels()` | |
+| FR-R-002 | キャンバスD&D接続 | `handleNodeClick()` (connectMode分岐) | |
+| FR-R-003 | ラベル入力ダイアログ | エッジラベルオーバーレイ | |
+| FR-R-004 | サイクル防止 | `wouldCreateCycle()` | BFS: from→toへの逆方向パス存在チェック |
+| FR-R-005 | 重複防止 | `confirmEdge()` 内チェック | |
+| FR-R-006 | 接続パネル所属フィルター | `syncConnectFiltersToCanvas()` | |
+| FR-R-010 | エッジクリックで詳細 | `findEdgeAtPoint()` → `openEdgeDetail()` | |
+| FR-R-011 | 接続元/先変更 | `saveEdgeDetail()` | |
+| FR-R-012 | ラベル編集（datalist補完） | `<input list="edge-label-datalist">` | |
+| FR-R-013 | エッジ個別削除 | `deleteEdgeFromDetail()` | |
+| FR-R-014 | 全リレーション削除 | `clearRelations()` | |
+| FR-R-020 | Canvas API描画 | `renderEdges()`, `drawOneEdge()` | |
+| FR-R-021 | 矢印描画 | `drawOneEdge()` 内 | |
+| FR-R-022 | ラベル表示 | `drawOneEdge()` 内 | |
+| FR-R-023 | ヒット判定 | `distToSegment()`, `findEdgeAtPoint()` | |
+| FR-R-024 | ハイライト連動Dim | `renderEdges()` (hlFocusEdges判定) | |
+
+### 5.3 所属管理
+
+| ID | 要件 | 実装関数 |
+|---|---|---|
+| FR-A-001 | 所属追加（最大30文字） | `addAffiliation()` |
+| FR-A-002 | カラー自動割当 | `AFFIL_COLORS[index % length]` |
+| FR-A-003 | インライン編集 | `startAffilRename()` |
+| FR-A-004 | 重複チェック | `addAffiliation()`, `startAffilRename()` |
+| FR-A-005 | ドラッグ並べ替え | `setupAffilDrag()` |
+| FR-A-006 | 所属削除 | `deleteAffiliation()` |
+| FR-A-007 | カラーバッジ表示 | `buildNodeHtml()` |
+
+### 5.4 キャンバス操作
+
+| ID | 要件 | 実装 |
+|---|---|---|
+| FR-C-001 | ノードドラッグ | `startDrag()`, mousemove handler |
+| FR-C-002 | パン | mousedown on blank + mousemove / middle button |
+| FR-C-003 | ズーム | wheel event on `#canvas-container` |
+| FR-C-004 | ズーム範囲 20%〜400% | `ZOOM_MIN=0.2`, `ZOOM_MAX=4.0` |
+| FR-C-005 | 全体表示 | `fitView()` |
+| FR-C-006 | ラバーバンド選択 | `updateRubberBand()`, `finalizeRubberBand()` |
+| FR-C-007 | グリッド背景 | CSS `background-image: radial-gradient(...)` |
+| FR-C-008 | ツールチップ | `showNodeTooltip()`, `hideNodeTooltip()` |
+| FR-C-009 | ビューポートカリング | `isNodeInViewport()`, `renderNodes()` |
+
+### 5.5 ハイライトモード
+
+| ID | 要件 | 実装関数 |
+|---|---|---|
+| FR-H-001 | トグル | `toggleHighlightMode()` |
+| FR-H-002 | BFS探索（上流+下流） | `applyHighlight(nodeId)` |
+| FR-H-003 | 深度ベースグラデーション | `getNodeHlColor()`, `getEdgeHlColor()` |
+| FR-H-004 | Dim表示 | CSS `.hl-mode .hl-dim` |
+| FR-H-005 | クリックロック | `hlLocked` フラグ |
+| FR-H-006 | エッジ強調 | `hlFocusEdges` Set |
+
+### 5.6 レベルシステム
+
+| ID | 要件 | 実装 |
+|---|---|---|
+| FR-L-001 | lv1〜lv4 | `task.level` |
+| FR-L-002 | レベル指定モード | `toggleLevelEditMode()` |
+| FR-L-003 | ラバーバンド一括 | `applyLevelToSelected()` |
+| FR-L-004 | レベルフィルター | `setLevelFilter()` |
+| FR-L-005 | 仮想エッジ | `computeVirtualEdges()`, `drawVirtualEdge()` |
+| FR-L-006 | 表示スタイル | `applyNodeLevelStyle()` |
+| FR-L-007 | DB IDバッジ | `buildNodeHtml()` |
+
+### 5.7 フィルタリング
+
+| ID | 要件 | 実装関数 |
+|---|---|---|
+| FR-F-001 | 所属フィルター | `toggleAffilFilter()` |
+| FR-F-002 | 複数選択AND | `isTaskVisible()` |
+| FR-F-003 | 「すべて」チップ | `clearAffilFilter()` |
+| FR-F-004 | 世代範囲指定 | `applyGenFilter()` |
+| FR-F-005 | 黄色ハイライト | CSS `.gen-filter-active` |
+| FR-F-006 | 世代定義 | `computeGenerations()` |
+
+### 5.8 自動整列
+
+| ID | 要件 | 実装 |
+|---|---|---|
+| FR-AL-001 | 世代ベース列配置（COL_W=260px） | `autoLayout()` |
+| FR-AL-002 | 所属ゾーンモード | `autoLayout()` (affilZoneMode分岐) |
+| FR-AL-003 | ゾーン背景描画 | `drawMainZones()` |
+| FR-AL-004 | 非ゾーンモード | `autoLayout()` (else分岐) |
+| FR-AL-005 | 全体世代維持 | `getGenerations()` (globalGens) |
+
+### 5.9〜5.11 ビュー系
+
+| ID | 要件 | 実装関数 |
+|---|---|---|
+| FR-SG-001〜006 | サブグラフビュー | `openSubgraph()`, `renderSubgraph()`, `getSubGraphData()` |
+| FR-3D-001〜010 | 3Dビュー | `open3dView()`, `render3dView()`, `v3dProject()` |
+| FR-SEC-001〜005 | 断面ビュー | `openSectionView()`, `renderSectionView()` |
+
+### 5.12 インポート
+
+| ID | 要件 | 実装関数 |
+|---|---|---|
+| FR-IM-001 | CSV/Excel対応 | `processImportFile()` |
+| FR-IM-002 | ノード/エッジタブ | `switchImportTab()` |
+| FR-IM-003 | D&D | `handleImportDrop()` |
+| FR-IM-004 | ファイル選択 | `handleImportFileSelect()` |
+| FR-IM-005 | 3件プレビュー | `showImportPreview()` |
+| FR-IM-006 | フォーマット情報 | `updateImportFormatInfo()` |
+| FR-IM-007 | テンプレートDL | `downloadImportTemplate()` |
+| FR-IM-008 | 追加/置換モード | `showImportModeDialog()` |
+| FR-IM-009 | サイクル検出 | `detectAllCycles()` (カーンのアルゴリズム) |
+| FR-IM-010 | DB ID自動生成 | `generateDbId()` |
+| FR-IM-011 | SheetJS遅延ロード | `loadSheetJS()` |
+| FR-IM-012 | CSVパーサー | `parseCSV()` |
+
+**ノードCSVカラム**: `db_id, title, affiliation, status, desc, level, planned_start, planned_end, actual_start, actual_end`
+**エッジCSVカラム**: `from_id, to_id, label`
+
+### 5.13 エクスポート
+
+| ID | 要件 | 実装関数 |
+|---|---|---|
+| FR-EX-001 | ノードCSV（11カラム） | `exportNodesCSV()` |
+| FR-EX-002 | エッジCSV（3カラム） | `exportEdgesCSV()` |
+| FR-EX-003 | DB ID自動採番 | `ensureAllDbIds()` |
+| FR-EX-006 | BOM付きUTF-8 | `downloadCSV()`: `'\uFEFF' + csvText` |
+| FR-EX-007 | フィールドエスケープ | `toCsvField()` |
+
+**出力カラム（ノード）**: `db_id, title, affiliation, status, computed_status, desc, level, planned_start, planned_end, actual_start, actual_end`
+
+### 5.14 テーマ
+
+| テーマ名 | `--c1` | `--c2` | `--c3` | `--node-border` |
+|---|---|---|---|---|
+| violet (default) | `#7c3aed` | `#a78bfa` | `#c4b5fd` | `#4c3a8a` |
+| ocean | `#0369a1` | `#38bdf8` | `#7dd3fc` | `#0c4a6e` |
+| forest | `#166534` | `#4ade80` | `#86efac` | `#14532d` |
+| ember | `#c2410c` | `#fb923c` | `#fdba74` | `#7c2d12` |
+| rose | `#9f1239` | `#fb7185` | `#fda4af` | `#881337` |
+
+**キャンバススタイル**:
+- `light`: `--canvas-bg: #ebebef`, edge色: `rgba(30,58,138,0.82)`
+- `dark`: `--canvas-bg: #0f0f13`, edge色: `rgba(255,255,255,0.82)`
+
+### 5.15 分析モード
+
+**排他制御**: 接続モードと同時ON不可
+
+**統計ダッシュボード** (`renderStatsPanel()`):
+- 基本統計: ノード数, エッジ数, 密度, 平均次数, 最大世代, CP長
+- 特殊ノード: ルート(in=0,out>0), リーフ(out=0,in>0), 孤立(in=0,out=0), 連結成分
+- 次数ランキングTOP5
+- 分布: 世代別, 所属別, ステータス別
+
+**構造分析パネル** (`renderAnalysisPanel()`) — 6タブ:
+
+| タブ | 関数 | 内容 |
+|---|---|---|
+| 🎯 中心性 | `_renderTabCentrality()` | 次数中心性TOP10 + 媒介中心性TOP10 (V≤200) |
+| 🔴 CP | `_renderTabCriticalPath()` | 最長パス表示 + ハイライト機能 |
+| 🏗️ ボトルネック | `_renderTabBottleneck()` | スコア=in×out、🔴≥10/🟡≥5/🔵<5 |
+| 📊 トポロジカル | `_renderTabTopological()` | トポロジカル順序リスト |
+| 🏷️ 情報種類 | `_renderTabEdgeLabel()` | ラベル設定率 + 分布 |
+| 📅 スケジュール | `_renderTabSchedule()` | 日程カバレッジ + 遅延リスト |
+
+### 5.16 エッジラベルマスター
+
+- localStorage キー: `rt_edge_labels`（JSON配列）
+- 使用中ラベル + カスタムラベルの和集合
+- `<datalist id="edge-label-datalist">` で入力補完
+
+---
+
+## 6. 定数一覧
+
+```javascript
+// ズーム
+const ZOOM_MIN = 0.2, ZOOM_MAX = 4.0;
+
+// メインキャンバスのノードサイズ推定
+const NODE_EST_W = 180, NODE_EST_H = 105;
+
+// 自動整列
+const COL_W = 260;       // 列幅
+const NODE_H = 105;      // ノード高さ
+const MIN_GAP = 65;      // 最小行間
+const ROW_H = 170;       // 行高 (NODE_H + MIN_GAP)
+const ZONE_PAD = 24;     // ゾーンパディング
+
+// 3Dビュー
+const VIEW3D_Z = { lv1: 750, lv2: 500, lv3: 250, lv4: 0 };
+const VIEW3D_NW = 160, VIEW3D_NH = 72;
+
+// 断面ビュー
+const SEC_LEVEL_ORDER = ['lv1', 'lv2', 'lv3', 'lv4'];
+const SEC_ZONE_H = 175;  // レベルゾーン高さ
+const SEC_GEN_W = 210;   // 世代列幅
+const SEC_NW = 160, SEC_NH = 74;  // ノードサイズ
+
+// サブグラフビュー
+const SG_NW = 180, SG_NH = 88;
+
+// ステータス色
+const STATUS_COLOR = {
+  todo: '#6b7280', doing: '#3b82f6', done: '#22c55e',
+  delayStart: '#f59e0b', delayEnd: '#ef4444'
+};
+
+// ステータスラベル
+const STATUS_LABEL = {
+  todo: '未着手', doing: '進行中', done: '完了',
+  delayStart: '開始遅延', delayEnd: '終了遅延'
+};
+
+// レベル数値マッピング
+const LEVEL_NUM = { lv1: 1, lv2: 2, lv3: 3, lv4: 4 };
+```
+
+---
+
+## 7. 永続化（localStorage）
+
+| キー | 内容 | 保存タイミング |
+|---|---|---|
+| `rt_tasks` | Task[] (JSON) | save()（500msデバウンス） |
+| `rt_relations` | Relation[] (JSON) | save()（500msデバウンス） |
+| `rt_affiliations` | Affiliation[] (JSON) | save()（500msデバウンス） |
+| `rt_edge_labels` | string[] (JSON) | ラベルマスター変更時 |
+| `rt_theme` | テーマ名 ("violet"等) | テーマ変更時 |
+| `rt_canvas` | キャンバススタイル ("light"/"dark") | スタイル変更時 |
+| `rt_stats_collapsed` | "1"/"0" | 統計パネル折りたたみ時 |
+| `rt_analysis_collapsed` | "1"/"0" | 分析パネル折りたたみ時 |
+| `rt_analysis_tab` | タブ名 | タブ切替時 |
+| `rt_reference_date` | 基準日 | 分析の基準日変更時 |
+
+---
+
+## 8. CSS変数（テーマシステム）
+
+### 8.1 カラー変数（:root / [data-theme]）
+```css
+--c1        /* プライマリカラー */
+--c2        /* セカンダリカラー */
+--c3        /* ターシャリカラー */
+--c1-05 〜 --c1-30  /* プライマリの透明度バリエーション */
+--c2-40     /* セカンダリの40%透明度 */
+--node-bg   /* ノード背景色 */
+--node-border /* ノードボーダー色 */
+--canvas-bg /* キャンバス背景色 */
+--canvas-grid /* グリッド色 */
+--bg-t1 〜 --bg-t4  /* ゾーン背景グラデーション色 */
+```
+
+### 8.2 キャンバスエッジ色（CANVAS_STYLES オブジェクト）
+```javascript
+// light / dark それぞれに以下のプロパティ:
+edge, edgeLabel, edgeDimLabel, edgeGray,
+virtualEdge, virtualEdgeHover, virtualShadow,
+sgEdge, sgEdgeLabel, sgNodeBg
+```
+
+---
+
+## 9. 制約・注意事項
+
+### 9.1 DAG制約
+- サイクル禁止: `wouldCreateCycle()` (BFS) + `detectAllCycles()` (カーン)
+- 自己ループ禁止
+- 重複エッジ禁止
+
+### 9.2 パフォーマンス制約
+- 媒介中心性: ノード数 > 200 でスキップ
+- 差分レンダリング: `getNodeContentHash()` でDOM更新を最小化
+- ビューポートカリング: `isNodeInViewport()` で画面外ノードをスキップ
+- エッジキャッシュ: ドラッグ中はオフスクリーンキャッシュ使用
+
+### 9.3 外部依存
+- SheetJS: Excel読み込み時のみCDN経由で遅延ロード
+- それ以外の外部ライブラリなし
+
+### 9.4 ブラウザ要件
+- Canvas API, CSS Custom Properties, ES6+ 必須
+- localStorage 必須（5〜10MB容量制限あり）
