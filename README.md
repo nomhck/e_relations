@@ -15,6 +15,19 @@ docs/     GitHub Pages公開用ファイルと設計資料
 本番想定では `web/` を Azure Static Web Apps、`api/` を Azure Functions、保存先を Azure Blob Storage に置き換えます。
 ローカルではAzureを使わず、`data/plans/*.json` に保存します。
 
+## 機能要件
+
+機能要件は [docs/functional-requirements.md](docs/functional-requirements.md) に整理しています。
+添付仕様のRelation Tool v2.1を参考にしつつ、初期版は軽く動くMVPとして次を優先します。
+
+- タスクの追加、編集、ドラッグ配置
+- FS / SS / FF / SF とラグ付き依存線の作成
+- 循環依存の防止
+- CPM計算、クリティカル、余裕日数の表示
+- ネットワーク図、ガント、表ビュー
+- 領域フィルター、検索、フォーカス一覧
+- localStorage、ローカルJSON、将来のBlob Storage保存
+
 ## 起動
 
 ```bash

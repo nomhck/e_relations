@@ -10,6 +10,29 @@ Azure依存を最小化し、工程管理ロジックは自前実装する。
 - 認証: 共有編集キー方式
 - DB / Cosmos DB / SQL / Entra ID / Key Vault / Data API Builder は初期版では使わない
 
+## 機能要件の採用方針
+
+詳細は [functional-requirements.md](functional-requirements.md) にまとめる。
+添付仕様のRelation Tool v2.1から、工程管理に直接効く機能を優先して採用する。
+
+初期版で必須にする機能:
+
+- タスクの追加、編集、ドラッグ配置
+- FS / SS / FF / SF とラグ付き依存線
+- 自己依存、重複依存、循環依存の防止
+- CPM計算、クリティカル、余裕日数の表示
+- ネットワーク図、ガント、表ビュー
+- 領域フィルター、検索、フォーカス一覧
+- localStorage、ローカルJSON、Azure Blob Storageへの保存
+
+次段階に回す機能:
+
+- タスクの説明、ステータス、予定日、実績日、レベル
+- 所属マスター、所属色、所属ゾーン
+- 依存線ラベル、CSV import/export、変更履歴
+- ボトルネック、中心性、世代、連結成分などの分析
+- サブグラフ、断面ビュー、3Dビュー
+
 ## 構成図
 
 ```mermaid
@@ -61,8 +84,39 @@ JSON:
   "name": "EPC Sample Plan",
   "editKeyHash": "sha256-hash",
   "version": 1,
-  "tasks": [],
-  "dependencies": [],
+  "tasks": [
+    {
+      "id": "t1",
+      "code": "E100",
+      "name": "PFD確定",
+      "area": "Engineering",
+      "owner": "Process Lead",
+      "duration": 8,
+      "progress": 0,
+      "x": 40,
+      "y": 78
+    },
+    {
+      "id": "t2",
+      "code": "E110",
+      "name": "P&ID Rev.B発行",
+      "area": "Engineering",
+      "owner": "Process Lead",
+      "duration": 14,
+      "progress": 0,
+      "x": 285,
+      "y": 72
+    }
+  ],
+  "dependencies": [
+    {
+      "id": "d1",
+      "from": "t1",
+      "to": "t2",
+      "type": "FS",
+      "lag": 0
+    }
+  ],
   "updatedAt": "2026-06-09T00:00:00.000Z"
 }
 ```
@@ -138,9 +192,9 @@ export function hasCycle(tasks, dependencies) {
   const outgoing = new Map(tasks.map((task) => [task.id, []]));
 
   for (const dep of dependencies) {
-    if (!ids.has(dep.fromTaskId) || !ids.has(dep.toTaskId)) continue;
-    outgoing.get(dep.fromTaskId).push(dep.toTaskId);
-    indegree.set(dep.toTaskId, indegree.get(dep.toTaskId) + 1);
+    if (!ids.has(dep.from) || !ids.has(dep.to)) continue;
+    outgoing.get(dep.from).push(dep.to);
+    indegree.set(dep.to, indegree.get(dep.to) + 1);
   }
 
   const queue = tasks
@@ -304,9 +358,9 @@ function validatePlan(plan) {
 
   const taskIds = new Set(plan.tasks.map((task) => task.id));
   for (const dep of plan.dependencies) {
-    if (!taskIds.has(dep.fromTaskId)) return `Unknown fromTaskId: ${dep.fromTaskId}`;
-    if (!taskIds.has(dep.toTaskId)) return `Unknown toTaskId: ${dep.toTaskId}`;
-    if (dep.fromTaskId === dep.toTaskId) return "Self dependency is not allowed";
+    if (!taskIds.has(dep.from)) return `Unknown from: ${dep.from}`;
+    if (!taskIds.has(dep.to)) return `Unknown to: ${dep.to}`;
+    if (dep.from === dep.to) return "Self dependency is not allowed";
   }
 
   if (hasCycle(plan.tasks, plan.dependencies)) {
@@ -322,9 +376,9 @@ function hasCycle(tasks, dependencies) {
   const outgoing = new Map(tasks.map((task) => [task.id, []]));
 
   for (const dep of dependencies) {
-    if (!ids.has(dep.fromTaskId) || !ids.has(dep.toTaskId)) continue;
-    outgoing.get(dep.fromTaskId).push(dep.toTaskId);
-    indegree.set(dep.toTaskId, indegree.get(dep.toTaskId) + 1);
+    if (!ids.has(dep.from) || !ids.has(dep.to)) continue;
+    outgoing.get(dep.from).push(dep.to);
+    indegree.set(dep.to, indegree.get(dep.to) + 1);
   }
 
   const queue = tasks
@@ -494,8 +548,13 @@ app.http("savePlan", {
 ## 後から追加する候補
 
 - `plans/{id}/history/{version}.json` に保存履歴
-- CSV import/export
 - 読み取り専用URLと編集URLの明確な分離
+- タスクの説明、ステータス、予定日、実績日、レベル
+- 所属マスター、所属色、所属ゾーン
+- 依存線ラベル
+- CSV import/export
+- ボトルネック、中心性、世代、連結成分などの分析
+- サブグラフ、断面ビュー、3Dビュー
 - Entra ID認証
 - Cosmos DB移行
 - リアルタイム共同編集
