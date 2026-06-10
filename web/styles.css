@@ -39,8 +39,8 @@ button {
 .topbar {
   min-height: 76px;
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) auto auto;
-  gap: 18px;
+  grid-template-columns: minmax(230px, 1fr) auto auto;
+  gap: 14px;
   align-items: center;
   padding: 14px 18px;
   border-bottom: 1px solid #cbd4cd;
@@ -76,33 +76,72 @@ button {
   font-size: 12px;
 }
 
-.actions,
-.link-settings {
+.actions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.actions button {
-  width: 38px;
+.actions {
+  justify-content: flex-end;
+}
+
+.actions .action-button {
+  min-width: 96px;
   height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   border: 1px solid #b9c4bc;
   border-radius: 8px;
   background: #fff;
   color: var(--text);
-  font-size: 20px;
+  padding: 0 11px;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
-.actions button.active {
+.action-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  color: var(--teal-dark);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.actions .action-button.active {
   border-color: var(--orange);
   background: #fff3e8;
   color: #9a4c1e;
 }
 
+.actions .action-button.active .action-icon {
+  color: #9a4c1e;
+}
+
+.actions .action-button.danger {
+  color: #6c514d;
+}
+
+.actions .action-button.danger .action-icon {
+  color: #8f2c2b;
+}
+
 .link-settings {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   padding-left: 14px;
   border-left: 1px solid var(--line);
+}
+
+.link-settings.active {
+  display: flex;
 }
 
 .link-settings label {
@@ -123,12 +162,16 @@ button {
   padding: 0 9px;
 }
 
+.link-settings select {
+  width: 148px;
+}
+
 .link-settings input {
-  width: 66px;
+  width: 72px;
 }
 
 .link-settings .edge-label-input {
-  width: 150px;
+  width: 138px;
 }
 
 .layout {
@@ -805,5 +848,54 @@ tr.selected {
   .stage-head {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 700px) {
+  .topbar {
+    gap: 10px;
+    padding: 10px 14px;
+  }
+
+  .brand-mark {
+    width: 42px;
+    height: 42px;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .actions .action-button {
+    min-width: 0;
+    height: 34px;
+    padding: 0 9px;
+  }
+
+  .link-settings.active {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    gap: 8px;
+    padding-top: 10px;
+    padding-left: 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .link-settings label {
+    display: grid;
+    align-items: stretch;
+    gap: 4px;
+  }
+
+  .link-settings label:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .link-settings select,
+  .link-settings input,
+  .link-settings .edge-label-input {
+    width: 100%;
   }
 }

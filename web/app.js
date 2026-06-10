@@ -45,6 +45,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     linkMode: $("#linkMode"),
     autoLayout: $("#autoLayout"),
     resetData: $("#resetData"),
+    linkSettings: $("#linkSettings"),
     relationType: $("#relationType"),
     lagDays: $("#lagDays"),
     edgeLabel: $("#edgeLabel")
@@ -74,6 +75,7 @@ function bindEvents() {
   });
   els.resetData.addEventListener("click", () => {
     // Reset returns the browser to the built-in sample EPC plan.
+    if (!window.confirm("サンプル工程に戻します。現在の編集内容は置き換わります。")) return;
     state = seedState();
     saveState();
     render();
@@ -297,6 +299,8 @@ function render() {
   });
 
   els.linkMode.classList.toggle("active", state.linkMode);
+  els.linkMode.querySelector("span:last-child").textContent = state.linkMode ? "接続中" : "依存接続";
+  els.linkSettings.classList.toggle("active", state.linkMode);
 
   renderMetrics();
   renderFilters();
@@ -308,11 +312,14 @@ function render() {
 
   if (state.linkMode && state.linkSource) {
     const source = getTask(state.linkSource);
-    setStatus(`${source.code} から接続中`, "warn");
+    setStatus(`接続中: ${source.code} → 後続タスクを選択`, "warn");
   } else if (state.linkMode) {
-    setStatus("依存線モード", "warn");
+    setStatus("接続中: 先行タスクを選択", "warn");
+  } else if (getTask(state.selected)) {
+    const selected = getTask(state.selected);
+    setStatus(`選択: ${selected.code} ${selected.name}`);
   } else {
-    setStatus("Ready");
+    setStatus("待機中");
   }
 }
 
@@ -601,7 +608,7 @@ function renderTable() {
 function renderInspector() {
   const selected = getTask(state.selected);
   if (!selected) {
-    els.inspector.innerHTML = `<section><div class="eyebrow">DETAIL</div><p>タスクを選択</p></section>`;
+    els.inspector.innerHTML = `<section><div class="eyebrow">詳細</div><p>タスクを選択</p></section>`;
     return;
   }
 
@@ -609,7 +616,7 @@ function renderInspector() {
   const timing = computeTaskStatus(selected);
   els.inspector.innerHTML = `
     <section>
-      <div class="eyebrow">DETAIL</div>
+      <div class="eyebrow">詳細</div>
       <h2>${escapeHtml(selected.code)} ${escapeHtml(selected.name)}</h2>
       <p class="note ${timing.severity}">${escapeHtml(timing.label)} · ${data.critical ? "クリティカルタスク" : `余裕 ${Math.round(data.float)}日`}</p>
       <div class="field-grid">

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>E Relations</title>
-    <link rel="stylesheet" href="./styles.css?v=3">
+    <link rel="stylesheet" href="./styles.css?v=4">
   </head>
   <body>
     <header class="topbar">
@@ -17,26 +17,38 @@
       </div>
 
       <div class="actions">
-        <button id="addTask" title="タスク追加">+</button>
-        <button id="linkMode" title="依存線追加">↘</button>
-        <button id="autoLayout" title="自動整列">⇄</button>
-        <button id="resetData" title="初期化">↺</button>
+        <button id="addTask" class="action-button" title="タスクを追加" aria-label="タスクを追加">
+          <span class="action-icon">+</span>
+          <span>タスク追加</span>
+        </button>
+        <button id="linkMode" class="action-button" title="依存線の接続モードを切り替え" aria-label="依存線の接続モードを切り替え">
+          <span class="action-icon">↘</span>
+          <span>依存接続</span>
+        </button>
+        <button id="autoLayout" class="action-button" title="タスクを自動整列" aria-label="タスクを自動整列">
+          <span class="action-icon">⇄</span>
+          <span>自動整列</span>
+        </button>
+        <button id="resetData" class="action-button danger" title="サンプル工程に戻す" aria-label="サンプル工程に戻す">
+          <span class="action-icon">↺</span>
+          <span>初期化</span>
+        </button>
       </div>
 
-      <div class="link-settings">
-        <label>関係
+      <div class="link-settings" id="linkSettings">
+        <label>依存種別
           <select id="relationType">
-            <option value="FS">FS</option>
-            <option value="SS">SS</option>
-            <option value="FF">FF</option>
-            <option value="SF">SF</option>
+            <option value="FS">FS 完了→開始</option>
+            <option value="SS">SS 開始→開始</option>
+            <option value="FF">FF 完了→完了</option>
+            <option value="SF">SF 開始→完了</option>
           </select>
         </label>
-        <label>ラグ
+        <label>ラグ(日)
           <input id="lagDays" type="number" value="0" min="-30" max="90">
         </label>
-        <label>ラベル
-          <input id="edgeLabel" class="edge-label-input" type="text" maxlength="30" placeholder="成果物・制約">
+        <label>線ラベル
+          <input id="edgeLabel" class="edge-label-input" type="text" maxlength="30" placeholder="IFC図・制約">
         </label>
       </div>
     </header>
@@ -44,18 +56,18 @@
     <main class="layout">
       <aside class="sidebar">
         <section>
-          <div class="eyebrow">PROJECT</div>
+          <div class="eyebrow">概要</div>
           <h2>Greenfield Process Unit</h2>
           <div class="metrics" id="metrics"></div>
         </section>
 
         <section>
-          <div class="eyebrow">AREA</div>
+          <div class="eyebrow">領域</div>
           <div class="filters" id="filters"></div>
         </section>
 
         <section>
-          <div class="eyebrow">FOCUS</div>
+          <div class="eyebrow">注目</div>
           <div class="focus-list" id="focusList"></div>
         </section>
       </aside>
@@ -109,6 +121,6 @@
       <aside class="inspector" id="inspector"></aside>
     </main>
 
-    <script src="./app.js?v=3"></script>
+    <script src="./app.js?v=4"></script>
   </body>
 </html>
