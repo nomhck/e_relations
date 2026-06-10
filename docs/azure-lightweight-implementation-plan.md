@@ -23,13 +23,15 @@ Azure依存を最小化し、工程管理ロジックは自前実装する。
 - CPM計算、クリティカル、余裕日数の表示
 - ネットワーク図、ガント、表ビュー
 - 領域フィルター、検索、フォーカス一覧
+- タスクの説明、ステータス、予定日、実績日、レベル
+- 所属/領域マスター、色分け、絞り込み
+- 依存線ラベル
 - localStorage、ローカルJSON、Azure Blob Storageへの保存
 
 次段階に回す機能:
 
-- タスクの説明、ステータス、予定日、実績日、レベル
-- 所属マスター、所属色、所属ゾーン
-- 依存線ラベル、CSV import/export、変更履歴
+- CSV import/export、変更履歴
+- 所属ゾーン
 - ボトルネック、中心性、世代、連結成分などの分析
 - サブグラフ、断面ビュー、3Dビュー
 
@@ -93,6 +95,13 @@ JSON:
       "owner": "Process Lead",
       "duration": 8,
       "progress": 0,
+      "description": "",
+      "status": "todo",
+      "level": "lv4",
+      "plannedStart": "",
+      "plannedEnd": "",
+      "actualStart": "",
+      "actualEnd": "",
       "x": 40,
       "y": 78
     },
@@ -104,6 +113,13 @@ JSON:
       "owner": "Process Lead",
       "duration": 14,
       "progress": 0,
+      "description": "",
+      "status": "todo",
+      "level": "lv4",
+      "plannedStart": "",
+      "plannedEnd": "",
+      "actualStart": "",
+      "actualEnd": "",
       "x": 285,
       "y": 72
     }
@@ -114,7 +130,8 @@ JSON:
       "from": "t1",
       "to": "t2",
       "type": "FS",
-      "lag": 0
+      "lag": 0,
+      "label": "P&ID input"
     }
   ],
   "updatedAt": "2026-06-09T00:00:00.000Z"

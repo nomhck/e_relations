@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>E Relations</title>
-    <link rel="stylesheet" href="./styles.css?v=2">
+    <link rel="stylesheet" href="./styles.css?v=3">
   </head>
   <body>
     <header class="topbar">
@@ -34,6 +34,9 @@
         </label>
         <label>ラグ
           <input id="lagDays" type="number" value="0" min="-30" max="90">
+        </label>
+        <label>ラベル
+          <input id="edgeLabel" class="edge-label-input" type="text" maxlength="30" placeholder="成果物・制約">
         </label>
       </div>
     </header>
@@ -88,8 +91,11 @@
                   <th>コード</th>
                   <th>タスク</th>
                   <th>領域</th>
+                  <th>状態</th>
+                  <th>Lv</th>
                   <th>期間</th>
                   <th>進捗</th>
+                  <th>予定完了</th>
                   <th>先行</th>
                   <th>余裕</th>
                 </tr>
@@ -103,6 +109,6 @@
       <aside class="inspector" id="inspector"></aside>
     </main>
 
-    <script src="./app.js?v=2"></script>
+    <script src="./app.js?v=3"></script>
   </body>
 </html>

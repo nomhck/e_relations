@@ -1,9 +1,21 @@
 const STORAGE_KEY = "e-relations-gui-v1";
 const NODE_W = 196;
-const NODE_H = 110;
+const NODE_H = 132;
 const DAY_W = 18;
-const AREAS = ["Engineering", "Procurement", "Fabrication", "Construction", "Commissioning"];
+const DEFAULT_AREAS = ["Engineering", "Procurement", "Fabrication", "Construction", "Commissioning"];
+const AREA_COLORS = ["#287d7c", "#315d95", "#8b5a2b", "#6d7f3f", "#8d4970", "#5b6f92", "#9a5a34"];
 const RELATIONS = ["FS", "SS", "FF", "SF"];
+const STATUSES = [
+  ["todo", "未着手"],
+  ["doing", "進行中"],
+  ["done", "完了"]
+];
+const LEVELS = [
+  ["lv1", "Lv1"],
+  ["lv2", "Lv2"],
+  ["lv3", "Lv3"],
+  ["lv4", "Lv4"]
+];
 
 // UI state is kept in memory, mirrored to localStorage, and optionally saved through the local API.
 let state = loadState();
@@ -34,7 +46,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     autoLayout: $("#autoLayout"),
     resetData: $("#resetData"),
     relationType: $("#relationType"),
-    lagDays: $("#lagDays")
+    lagDays: $("#lagDays"),
+    edgeLabel: $("#edgeLabel")
   });
 
   bindEvents();
@@ -82,6 +95,14 @@ function bindEvents() {
     els.lagDays.value = state.lagDays;
     saveState();
   });
+  const syncEdgeLabel = () => {
+    // The label is applied to the next dependency created or updated in link mode.
+    state.edgeLabel = els.edgeLabel.value.trim().slice(0, 30);
+    els.edgeLabel.value = state.edgeLabel;
+    saveState();
+  };
+  els.edgeLabel.addEventListener("input", syncEdgeLabel);
+  els.edgeLabel.addEventListener("change", syncEdgeLabel);
 
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -94,11 +115,29 @@ function bindEvents() {
 
   els.filters.addEventListener("click", (event) => {
     // Area filters narrow all views to the selected EPC work area.
+    const addButton = event.target.closest("[data-add-area]");
+    if (addButton) {
+      addArea();
+      return;
+    }
+
+    const deleteButton = event.target.closest("[data-delete-area]");
+    if (deleteButton) {
+      deleteArea(deleteButton.dataset.deleteArea);
+      return;
+    }
+
     const button = event.target.closest("[data-area]");
     if (!button) return;
     state.area = button.dataset.area;
     saveState();
     render();
+  });
+  els.filters.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && event.target.matches("[data-new-area]")) {
+      event.preventDefault();
+      addArea();
+    }
   });
 
   els.nodes.addEventListener("pointerdown", startDrag);
@@ -126,13 +165,15 @@ function bindEvents() {
   });
 
   els.inspector.addEventListener("change", onInspectorChange);
+  els.inspector.addEventListener("input", onInspectorInput);
+  els.inspector.addEventListener("click", onInspectorClick);
 }
 
 // Load the last browser-local state. Broken JSON falls back to the sample data.
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) return normalizeState(JSON.parse(raw));
   } catch {
     // Ignore broken localStorage state.
   }
@@ -152,13 +193,13 @@ async function loadRemotePlan() {
     if (!res.ok) return;
     const data = await res.json();
     if (data.plan?.tasks && data.plan?.dependencies) {
-      state = {
+      state = normalizeState({
         ...state,
         ...data.plan,
         view: state.view || "network",
         area: state.area || "all",
         search: state.search || ""
-      };
+      });
     }
   } catch {
     // Local static file mode can still run without the API server.
@@ -190,6 +231,8 @@ function seedState() {
     linkSource: null,
     relationType: "FS",
     lagDays: 0,
+    edgeLabel: "",
+    areas: DEFAULT_AREAS.slice(),
     tasks: [
       task("t1", "E100", "PFD確定", "Engineering", "Process Lead", 8, 40, 78),
       task("t2", "E110", "P&ID Rev.B発行", "Engineering", "Process Lead", 14, 285, 72),
@@ -230,12 +273,12 @@ function seedState() {
 
 // Task factory keeps seed data compact and consistent.
 function task(id, code, name, area, owner, duration, x, y) {
-  return { id, code, name, area, owner, duration, progress: 0, x, y };
+  return normalizeTask({ id, code, name, area, owner, duration, progress: 0, x, y });
 }
 
 // Dependency factory supports FS/SS/FF/SF plus lag days.
-function dep(id, from, to, type, lag) {
-  return { id, from, to, type, lag };
+function dep(id, from, to, type, lag, label = "") {
+  return normalizeDependency({ id, from, to, type, lag, label });
 }
 
 // Main render pipeline: recalculate schedule, sync controls, then repaint every view.
@@ -244,6 +287,7 @@ function render() {
   els.search.value = state.search || "";
   els.relationType.value = state.relationType || "FS";
   els.lagDays.value = state.lagDays || 0;
+  els.edgeLabel.value = state.edgeLabel || "";
 
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.view === state.view);
@@ -275,11 +319,13 @@ function render() {
 // Render summary cards for project duration, task count, dependency count, and critical count.
 function renderMetrics() {
   const criticalCount = [...schedule.items.values()].filter((item) => item.critical).length;
+  const delayCount = state.tasks.filter((taskItem) => computeTaskStatus(taskItem).severity === "late").length;
   const metrics = [
     [`${schedule.duration}日`, "計算工期"],
     [state.tasks.length, "タスク"],
     [state.dependencies.length, "依存線"],
-    [criticalCount, "クリティカル"]
+    [criticalCount, "クリティカル"],
+    [delayCount, "日程注意"]
   ];
 
   els.metrics.innerHTML = metrics
@@ -289,34 +335,54 @@ function renderMetrics() {
 
 // Render area filter buttons and their task counts.
 function renderFilters() {
+  const areas = getAreas();
   const buttons = [
     ["all", "すべて", state.tasks.length],
-    ...AREAS.map((area) => [area, area, state.tasks.filter((taskItem) => taskItem.area === area).length])
+    ...areas.map((area) => [area, area, state.tasks.filter((taskItem) => taskItem.area === area).length])
   ];
 
-  els.filters.innerHTML = buttons
-    .map(([area, label, count]) => `
+  els.filters.innerHTML = `
+    <div class="filter-chips">
+      ${buttons.map(([area, label, count]) => `
       <button class="chip ${state.area === area ? "active" : ""}" data-area="${area}">
-        <span>${escapeHtml(label)}</span>
+        <span><span class="area-swatch" style="background:${area === "all" ? "#aab4ad" : areaColor(area)}"></span>${escapeHtml(label)}</span>
         <span class="badge">${count}</span>
       </button>
-    `)
-    .join("");
+      `).join("")}
+    </div>
+    <div class="area-manager">
+      <input data-new-area type="text" maxlength="24" placeholder="所属/領域を追加">
+      <button type="button" data-add-area>追加</button>
+    </div>
+    <div class="area-master">
+      ${areas.map((area) => {
+        const used = state.tasks.some((taskItem) => taskItem.area === area);
+        const fixed = DEFAULT_AREAS.includes(area);
+        return `
+          <div class="area-row">
+            <span><span class="area-swatch" style="background:${areaColor(area)}"></span>${escapeHtml(area)}</span>
+            <button type="button" data-delete-area="${escapeAttr(area)}" ${used || fixed ? "disabled" : ""}>削除</button>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
 }
 
 // Render short list of tasks that need attention because they are critical or low-float.
 function renderFocus() {
   const items = state.tasks
     .map((taskItem) => ({ task: taskItem, data: schedule.items.get(taskItem.id) }))
-    .filter((item) => item.data?.critical || item.data?.float <= 3)
-    .sort((a, b) => a.data.float - b.data.float)
+    .map((item) => ({ ...item, timing: computeTaskStatus(item.task) }))
+    .filter((item) => item.timing.severity === "late" || item.data?.critical || item.data?.float <= 3)
+    .sort((a, b) => (a.timing.severity === "late" ? -1 : 0) - (b.timing.severity === "late" ? -1 : 0) || a.data.float - b.data.float)
     .slice(0, 5);
 
   els.focusList.innerHTML = items
-    .map(({ task: taskItem, data }) => `
+    .map(({ task: taskItem, data, timing }) => `
       <button class="focus-item" data-id="${taskItem.id}">
         <strong>${escapeHtml(taskItem.code)} ${escapeHtml(taskItem.name)}</strong>
-        <span>${data.critical ? "Critical" : `Float ${Math.round(data.float)}日`} · ${escapeHtml(taskItem.owner)}</span>
+        <span>${timing.severity === "late" ? timing.label : data.critical ? "Critical" : `Float ${Math.round(data.float)}日`} · ${escapeHtml(taskItem.owner || "-")}</span>
       </button>
     `)
     .join("");
@@ -339,14 +405,19 @@ function renderNetwork() {
   els.nodes.innerHTML = visible
     .map((taskItem) => {
       const data = schedule.items.get(taskItem.id);
+      const timing = computeTaskStatus(taskItem);
       return `
         <article class="node ${taskItem.id === state.selected ? "selected" : ""} ${data.critical ? "critical" : ""} ${taskItem.id === state.linkSource ? "link-source" : ""}"
-          data-id="${taskItem.id}" style="left:${taskItem.x}px;top:${taskItem.y}px">
+          data-id="${taskItem.id}" style="left:${taskItem.x}px;top:${taskItem.y}px;--area-color:${areaColor(taskItem.area)}">
           <div class="node-head">
             <span class="node-code">${escapeHtml(taskItem.code)}</span>
             <span class="node-area">${escapeHtml(taskItem.area)}</span>
           </div>
           <div class="node-name">${escapeHtml(taskItem.name)}</div>
+          <div class="node-tags">
+            <span class="status-badge ${timing.key}">${escapeHtml(timing.label)}</span>
+            <span class="level-chip">${escapeHtml(levelLabel(taskItem.level))}</span>
+          </div>
           <div class="node-meta">
             <span>${taskItem.duration}日</span>
             <span>${data.critical ? "Critical" : `Float ${Math.round(data.float)}日`}</span>
@@ -403,13 +474,13 @@ function renderEdges(visibleIds) {
       const c1y = y1 + bend;
       const c2y = y2 - bend;
       const critical = fromData.critical && toData.critical && Math.abs(toData.es - (fromData.es + dependencyOffset(item, from, to))) < 0.001;
-      const label = `${item.type}${item.lag ? item.lag > 0 ? `+${item.lag}` : item.lag : ""}`;
+      const label = dependencyLabel(item);
       const labelX = (x1 + x2) / 2;
       const labelY = (y1 + y2) / 2 + bend * 0.45 - 8;
 
       return `
         <path class="edge ${critical ? "critical" : ""}" d="M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}" marker-end="url(#${critical ? "arrowCritical" : "arrow"})"></path>
-        <text class="edge-label" x="${labelX}" y="${labelY}">${label}</text>
+        <text class="edge-label" x="${labelX}" y="${labelY}">${escapeHtml(label)}</text>
       `;
     })
     .join("");
@@ -486,11 +557,12 @@ function renderGantt() {
       </div>
       ${tasks.map((taskItem) => {
         const data = schedule.items.get(taskItem.id);
+        const timing = computeTaskStatus(taskItem);
         return `
           <div class="gantt-row">
             <div class="gantt-label">
               <strong>${escapeHtml(taskItem.code)} ${escapeHtml(taskItem.name)}</strong>
-              <span>${escapeHtml(taskItem.area)} · ${escapeHtml(taskItem.owner)}</span>
+              <span>${escapeHtml(taskItem.area)} · ${escapeHtml(taskItem.owner || "-")} · ${escapeHtml(timing.label)}</span>
             </div>
             <div class="gantt-line" style="width:${timelineWidth}px">
               <div class="bar ${data.critical ? "critical" : ""}" style="left:${data.es * DAY_W}px;width:${taskItem.duration * DAY_W}px"></div>
@@ -511,10 +583,13 @@ function renderTable() {
         <tr class="${taskItem.id === state.selected ? "selected" : ""}" data-id="${taskItem.id}">
           <td><input data-field="code" value="${escapeAttr(taskItem.code)}"></td>
           <td><input data-field="name" value="${escapeAttr(taskItem.name)}"></td>
-          <td><select data-field="area">${AREAS.map((area) => `<option ${area === taskItem.area ? "selected" : ""}>${area}</option>`).join("")}</select></td>
+          <td><select data-field="area">${getAreas().map((area) => `<option ${area === taskItem.area ? "selected" : ""}>${escapeHtml(area)}</option>`).join("")}</select></td>
+          <td><select data-field="status">${STATUSES.map(([value, label]) => `<option value="${value}" ${value === taskItem.status ? "selected" : ""}>${label}</option>`).join("")}</select></td>
+          <td><select data-field="level">${LEVELS.map(([value, label]) => `<option value="${value}" ${value === taskItem.level ? "selected" : ""}>${label}</option>`).join("")}</select></td>
           <td><input data-field="duration" type="number" min="1" value="${taskItem.duration}"></td>
           <td><input data-field="progress" type="number" min="0" max="100" value="${taskItem.progress}"></td>
-          <td>${predecessorCodes(taskItem.id).join(", ") || "-"}</td>
+          <td><input data-field="plannedEnd" type="date" value="${escapeAttr(taskItem.plannedEnd || "")}"></td>
+          <td>${predecessorSummaries(taskItem.id).join(", ") || "-"}</td>
           <td>${data.critical ? "Critical" : `${Math.round(data.float)}日`}</td>
         </tr>
       `;
@@ -531,10 +606,12 @@ function renderInspector() {
   }
 
   const data = schedule.items.get(selected.id);
+  const timing = computeTaskStatus(selected);
   els.inspector.innerHTML = `
     <section>
       <div class="eyebrow">DETAIL</div>
       <h2>${escapeHtml(selected.code)} ${escapeHtml(selected.name)}</h2>
+      <p class="note ${timing.severity}">${escapeHtml(timing.label)} · ${data.critical ? "クリティカルタスク" : `余裕 ${Math.round(data.float)}日`}</p>
       <div class="field-grid">
         <label class="wide">タスク名
           <input data-inspector="name" value="${escapeAttr(selected.name)}">
@@ -543,7 +620,13 @@ function renderInspector() {
           <input data-inspector="code" value="${escapeAttr(selected.code)}">
         </label>
         <label>領域
-          <select data-inspector="area">${AREAS.map((area) => `<option ${area === selected.area ? "selected" : ""}>${area}</option>`).join("")}</select>
+          <select data-inspector="area">${getAreas().map((area) => `<option ${area === selected.area ? "selected" : ""}>${escapeHtml(area)}</option>`).join("")}</select>
+        </label>
+        <label>状態
+          <select data-inspector="status">${STATUSES.map(([value, label]) => `<option value="${value}" ${value === selected.status ? "selected" : ""}>${label}</option>`).join("")}</select>
+        </label>
+        <label>レベル
+          <select data-inspector="level">${LEVELS.map(([value, label]) => `<option value="${value}" ${value === selected.level ? "selected" : ""}>${label}</option>`).join("")}</select>
         </label>
         <label>担当
           <input data-inspector="owner" value="${escapeAttr(selected.owner)}">
@@ -554,8 +637,23 @@ function renderInspector() {
         <label>進捗
           <input data-inspector="progress" type="number" min="0" max="100" value="${selected.progress}">
         </label>
+        <label>予定開始
+          <input data-inspector="plannedStart" type="date" value="${escapeAttr(selected.plannedStart || "")}">
+        </label>
+        <label>予定完了
+          <input data-inspector="plannedEnd" type="date" value="${escapeAttr(selected.plannedEnd || "")}">
+        </label>
+        <label>実績開始
+          <input data-inspector="actualStart" type="date" value="${escapeAttr(selected.actualStart || "")}">
+        </label>
+        <label>実績完了
+          <input data-inspector="actualEnd" type="date" value="${escapeAttr(selected.actualEnd || "")}">
+        </label>
+        <label class="wide">説明・メモ
+          <textarea data-inspector="description" rows="4" maxlength="300">${escapeHtml(selected.description || "")}</textarea>
+        </label>
       </div>
-      <p class="note">${data.critical ? "クリティカルタスク" : `余裕 ${Math.round(data.float)}日`}</p>
+      ${renderDependencyEditor(selected.id)}
     </section>
   `;
 }
@@ -579,7 +677,7 @@ function onNodeClick(id) {
 
   const nextDeps = [
     ...state.dependencies,
-    dep(`d${Date.now()}`, state.linkSource, id, state.relationType, clamp(parseInt(state.lagDays, 10), -30, 90, 0))
+    dep(`d${Date.now()}`, state.linkSource, id, state.relationType, clamp(parseInt(state.lagDays, 10), -30, 90, 0), state.edgeLabel)
   ];
 
   if (hasCycle(state.tasks, nextDeps)) {
@@ -592,6 +690,7 @@ function onNodeClick(id) {
   if (existing) {
     existing.type = state.relationType;
     existing.lag = state.lagDays;
+    existing.label = state.edgeLabel;
   } else {
     state.dependencies = nextDeps;
   }
@@ -650,15 +749,39 @@ function endDrag() {
 // Apply changes made in the table view.
 function onTableChange(event) {
   const row = event.target.closest("[data-id]");
-  if (!row) return;
+  if (!row || !event.target.dataset.field) return;
   updateTask(row.dataset.id, event.target.dataset.field, event.target.value);
 }
 
 // Apply changes made in the inspector panel.
 function onInspectorChange(event) {
+  const depField = event.target.dataset.dependencyField;
+  if (depField) {
+    updateDependency(event.target.closest("[data-dependency-id]")?.dataset.dependencyId, depField, event.target.value);
+    return;
+  }
+
   const field = event.target.dataset.inspector;
   if (!field) return;
   updateTask(state.selected, field, event.target.value);
+}
+
+// Save free-form notes while typing without re-rendering and stealing the cursor.
+function onInspectorInput(event) {
+  if (event.target.dataset.inspector !== "description") return;
+  const taskItem = getTask(state.selected);
+  if (!taskItem) return;
+  taskItem.description = event.target.value.trim().slice(0, 300);
+  saveState();
+}
+
+// Handle dependency deletion from the selected task detail panel.
+function onInspectorClick(event) {
+  const deleteButton = event.target.closest("[data-delete-dependency]");
+  if (!deleteButton) return;
+  state.dependencies = state.dependencies.filter((item) => item.id !== deleteButton.dataset.deleteDependency);
+  saveState();
+  render();
 }
 
 // Update a single task field and re-render all dependent views.
@@ -667,8 +790,24 @@ function updateTask(id, field, value) {
   if (!taskItem) return;
   if (field === "duration") taskItem.duration = clamp(parseInt(value, 10), 1, 365, taskItem.duration);
   else if (field === "progress") taskItem.progress = clamp(parseInt(value, 10), 0, 100, taskItem.progress);
+  else if (field === "status") taskItem.status = statusValues().includes(value) ? value : taskItem.status;
+  else if (field === "level") taskItem.level = levelValues().includes(value) ? value : taskItem.level;
+  else if (["plannedStart", "plannedEnd", "actualStart", "actualEnd"].includes(field)) taskItem[field] = normalizeDate(value);
+  else if (field === "description") taskItem.description = String(value).trim().slice(0, 300);
   else taskItem[field] = String(value).trim() || taskItem[field];
+  if (field === "area" && !state.areas.includes(taskItem.area)) state.areas.push(taskItem.area);
   state.selected = id;
+  saveState();
+  render();
+}
+
+// Update one dependency from the detail panel without changing its endpoints.
+function updateDependency(id, field, value) {
+  const item = state.dependencies.find((depItem) => depItem.id === id);
+  if (!item) return;
+  if (field === "type") item.type = RELATIONS.includes(value) ? value : item.type;
+  else if (field === "lag") item.lag = clamp(parseInt(value, 10), -30, 90, item.lag);
+  else if (field === "label") item.label = String(value).trim().slice(0, 30);
   saveState();
   render();
 }
@@ -676,7 +815,7 @@ function updateTask(id, field, value) {
 // Add a new task in the current area filter, then select it for editing.
 function addTask() {
   const id = `t${Date.now()}`;
-  const taskItem = task(id, `N${state.tasks.length + 1}`, "新規タスク", state.area === "all" ? "Engineering" : state.area, "", 5, 80, 120);
+  const taskItem = task(id, `N${state.tasks.length + 1}`, "新規タスク", state.area === "all" ? getAreas()[0] : state.area, "", 5, 80, 120);
   state.tasks.push(taskItem);
   state.selected = id;
   saveState();
@@ -686,11 +825,12 @@ function addTask() {
 // Place tasks in area lanes based on calculated earliest start.
 function autoLayout() {
   const byArea = new Map();
+  const areas = getAreas();
   const sorted = state.tasks.slice().sort((a, b) => schedule.items.get(a.id).es - schedule.items.get(b.id).es);
   sorted.forEach((taskItem) => {
     const lane = byArea.get(taskItem.area) || 0;
     byArea.set(taskItem.area, lane + 1);
-    const areaIndex = AREAS.indexOf(taskItem.area);
+    const areaIndex = Math.max(0, areas.indexOf(taskItem.area));
     taskItem.x = 40 + Math.min(5, Math.floor(schedule.items.get(taskItem.id).es / 20)) * 235;
     taskItem.y = 70 + areaIndex * 145 + (lane % 2) * 24;
   });
@@ -805,22 +945,195 @@ function visibleTasks() {
   const q = (state.search || "").toLowerCase();
   return state.tasks.filter((taskItem) => {
     const areaOk = state.area === "all" || taskItem.area === state.area;
-    const text = `${taskItem.code} ${taskItem.name} ${taskItem.owner} ${taskItem.area}`.toLowerCase();
+    const text = `${taskItem.code} ${taskItem.name} ${taskItem.owner} ${taskItem.area} ${taskItem.description} ${taskItem.status} ${taskItem.level}`.toLowerCase();
     return areaOk && (!q || text.includes(q));
   });
 }
 
-// Return predecessor codes for table display.
-function predecessorCodes(id) {
+// Return predecessor summaries for table display.
+function predecessorSummaries(id) {
   return state.dependencies
     .filter((item) => item.to === id)
-    .map((item) => getTask(item.from)?.code)
+    .map((item) => {
+      const source = getTask(item.from);
+      return source ? `${source.code} ${dependencyLabel(item)}` : "";
+    })
     .filter(Boolean);
 }
 
 // Find a task by id.
 function getTask(id) {
   return state.tasks.find((taskItem) => taskItem.id === id);
+}
+
+// Normalize loaded data so older localStorage/JSON plans keep working after schema additions.
+function normalizeState(raw) {
+  if (!raw || !Array.isArray(raw.tasks) || !Array.isArray(raw.dependencies)) return seedState();
+  const tasks = raw.tasks.map(normalizeTask);
+  const taskAreas = tasks.map((taskItem) => taskItem.area).filter(Boolean);
+  const areas = unique([...(Array.isArray(raw.areas) ? raw.areas : []), ...DEFAULT_AREAS, ...taskAreas]);
+  const area = raw.area === "all" || areas.includes(raw.area) ? raw.area : "all";
+
+  return {
+    ...raw,
+    view: ["network", "gantt", "table"].includes(raw.view) ? raw.view : "network",
+    area,
+    search: raw.search || "",
+    selected: tasks.some((taskItem) => taskItem.id === raw.selected) ? raw.selected : tasks[0]?.id,
+    linkMode: Boolean(raw.linkMode),
+    linkSource: raw.linkSource || null,
+    relationType: RELATIONS.includes(raw.relationType) ? raw.relationType : "FS",
+    lagDays: clamp(parseInt(raw.lagDays, 10), -30, 90, 0),
+    edgeLabel: String(raw.edgeLabel || "").slice(0, 30),
+    areas,
+    tasks,
+    dependencies: raw.dependencies.map(normalizeDependency)
+  };
+}
+
+// Fill missing task fields introduced after the original MVP.
+function normalizeTask(raw) {
+  const area = String(raw.area || DEFAULT_AREAS[0]).trim() || DEFAULT_AREAS[0];
+  return {
+    id: String(raw.id || `t${Date.now()}`),
+    code: String(raw.code || "N").trim() || "N",
+    name: String(raw.name || "新規タスク").trim() || "新規タスク",
+    area,
+    owner: String(raw.owner || "").trim(),
+    duration: clamp(parseInt(raw.duration, 10), 1, 365, 5),
+    progress: clamp(parseInt(raw.progress, 10), 0, 100, 0),
+    description: String(raw.description || "").trim().slice(0, 300),
+    status: statusValues().includes(raw.status) ? raw.status : "todo",
+    level: levelValues().includes(raw.level) ? raw.level : "lv4",
+    plannedStart: normalizeDate(raw.plannedStart),
+    plannedEnd: normalizeDate(raw.plannedEnd),
+    actualStart: normalizeDate(raw.actualStart),
+    actualEnd: normalizeDate(raw.actualEnd),
+    x: clamp(parseInt(raw.x, 10), 8, 1150, 80),
+    y: clamp(parseInt(raw.y, 10), 8, 700, 120)
+  };
+}
+
+// Fill missing dependency fields introduced after the original MVP.
+function normalizeDependency(raw) {
+  return {
+    id: String(raw.id || `d${Date.now()}`),
+    from: String(raw.from || ""),
+    to: String(raw.to || ""),
+    type: RELATIONS.includes(raw.type) ? raw.type : "FS",
+    lag: clamp(parseInt(raw.lag, 10), -30, 90, 0),
+    label: String(raw.label || "").trim().slice(0, 30)
+  };
+}
+
+// Render dependency rows connected from the selected task.
+function renderDependencyEditor(taskId) {
+  const outgoing = state.dependencies.filter((item) => item.from === taskId);
+  if (!outgoing.length) {
+    return `<div class="dependency-editor"><h3>後続依存</h3><p class="note">接続モードで後続タスクを選ぶと追加できます。</p></div>`;
+  }
+
+  return `
+    <div class="dependency-editor">
+      <h3>後続依存</h3>
+      ${outgoing.map((item) => {
+        const target = getTask(item.to);
+        return `
+          <div class="dependency-row" data-dependency-id="${escapeAttr(item.id)}">
+            <strong>→ ${escapeHtml(target ? `${target.code} ${target.name}` : item.to)}</strong>
+            <select data-dependency-field="type">${RELATIONS.map((type) => `<option value="${type}" ${type === item.type ? "selected" : ""}>${type}</option>`).join("")}</select>
+            <input data-dependency-field="lag" type="number" min="-30" max="90" value="${item.lag}">
+            <input data-dependency-field="label" maxlength="30" placeholder="ラベル" value="${escapeAttr(item.label || "")}">
+            <button type="button" data-delete-dependency="${escapeAttr(item.id)}">削除</button>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+// Add a custom affiliation/area used by filters and task editors.
+function addArea() {
+  const input = els.filters.querySelector("[data-new-area]");
+  const value = input?.value.trim().slice(0, 24);
+  if (!value) return;
+  if (!state.areas.includes(value)) state.areas.push(value);
+  state.area = value;
+  saveState();
+  render();
+}
+
+// Remove an unused custom affiliation/area.
+function deleteArea(area) {
+  if (DEFAULT_AREAS.includes(area) || state.tasks.some((taskItem) => taskItem.area === area)) return;
+  state.areas = state.areas.filter((item) => item !== area);
+  if (state.area === area) state.area = "all";
+  saveState();
+  render();
+}
+
+// Return all known affiliations/areas in a stable display order.
+function getAreas() {
+  return unique([...(state.areas || []), ...DEFAULT_AREAS, ...state.tasks.map((taskItem) => taskItem.area)]);
+}
+
+// Pick a consistent visual color for an affiliation/area.
+function areaColor(area) {
+  const areas = getAreas();
+  const index = Math.max(0, areas.indexOf(area));
+  return AREA_COLORS[index % AREA_COLORS.length];
+}
+
+// Build the compact edge label shown on SVG lines and predecessor cells.
+function dependencyLabel(item) {
+  const lag = item.lag ? item.lag > 0 ? `+${item.lag}` : item.lag : "";
+  return `${item.type}${lag}${item.label ? ` · ${item.label}` : ""}`;
+}
+
+// Compute display status, including simple planned/actual date delay flags.
+function computeTaskStatus(taskItem) {
+  const today = todayText();
+  if (taskItem.status === "done") return { key: "done", label: "完了", severity: "ok" };
+  if (taskItem.status === "doing" && taskItem.plannedEnd && taskItem.plannedEnd < today) {
+    return { key: "delayEnd", label: "終了遅延", severity: "late" };
+  }
+  if (taskItem.status === "todo" && taskItem.plannedStart && taskItem.plannedStart < today) {
+    return { key: "delayStart", label: "開始遅延", severity: "late" };
+  }
+  return { key: taskItem.status, label: statusLabel(taskItem.status), severity: "normal" };
+}
+
+function statusLabel(status) {
+  return STATUSES.find(([value]) => value === status)?.[1] || "未着手";
+}
+
+function levelLabel(level) {
+  return LEVELS.find(([value]) => value === level)?.[1] || "Lv4";
+}
+
+function statusValues() {
+  return STATUSES.map(([value]) => value);
+}
+
+function levelValues() {
+  return LEVELS.map(([value]) => value);
+}
+
+function normalizeDate(value) {
+  const text = String(value || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
+}
+
+function todayText() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function unique(items) {
+  return [...new Set(items.map((item) => String(item || "").trim()).filter(Boolean))];
 }
 
 // Update the status bar text and severity class.
