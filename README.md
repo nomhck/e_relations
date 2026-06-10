@@ -42,15 +42,6 @@ node --check web/app.js
 
 `docs/` 配下に静的GUIを配置しています。GitHub PagesではAPIは動かないため、保存はブラウザのlocalStorageのみです。
 
-公開設定:
-
-```txt
-GitHub repo > Settings > Pages
-Source: Deploy from a branch
-Branch: main
-Folder: /docs
-```
-
 公開URL:
 
 ```txt
@@ -64,7 +55,7 @@ https://nomhck.github.io/e_relations/
 
 ## Security Notes
 
-- このリポジトリには秘密情報、APIキー、GitHub token、Azure接続文字列を入れないでください。
+- このリポジトリには秘密情報、APIキー、GitHub token、Azure接続文字列を入れない
 - `.env`, `.env.*`, `local.settings.json`, `data/plans/*.json` はgit管理対象外です。
 - ローカル開発サーバーは既定で `127.0.0.1` のみにbindします。
 - GitHub Pages版は公開UIデモです。業務上の実データや機密工程を埋め込まないでください。
