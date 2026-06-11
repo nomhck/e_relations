@@ -949,7 +949,8 @@ function updateTask(id, field, value) {
   else if (field === "level") taskItem.level = levelValues().includes(value) ? value : taskItem.level;
   else if (["plannedStart", "plannedEnd", "actualStart", "actualEnd"].includes(field)) taskItem[field] = normalizeDate(value);
   else if (field === "description") taskItem.description = String(value).trim().slice(0, 300);
-  else taskItem[field] = String(value).trim() || taskItem[field];
+  else if (field === "owner") taskItem.owner = String(value).trim().slice(0, 60);
+  else if (["code", "name", "area"].includes(field)) taskItem[field] = String(value).trim() || taskItem[field];
   if (field === "area" && !state.areas.includes(taskItem.area)) state.areas.push(taskItem.area);
   state.selected = id;
   state.selectedDependency = null;
@@ -1270,8 +1271,8 @@ function normalizeTask(raw) {
     plannedEnd: normalizeDate(raw.plannedEnd),
     actualStart: normalizeDate(raw.actualStart),
     actualEnd: normalizeDate(raw.actualEnd),
-    x: clamp(parseInt(raw.x, 10), 8, 1150, 80),
-    y: clamp(parseInt(raw.y, 10), 8, 700, 120)
+    x: normalizePosition(raw.x, 80),
+    y: normalizePosition(raw.y, 120)
   };
 }
 
@@ -1438,6 +1439,12 @@ function setStatus(text, type = "") {
 // 数値入力を指定範囲に丸め、不正値ならフォールバック値を使います。
 function clamp(value, min, max, fallback) {
   return Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
+}
+
+// 自動整列や大きな工程で広がった配置を、再読み込み時に固定上限で潰さないようにします。
+function normalizePosition(value, fallback) {
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) ? Math.max(8, parsed) : fallback;
 }
 
 // HTMLテンプレートへ差し込む前に文字列をエスケープします。
