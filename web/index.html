@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>E Relations</title>
-    <link rel="stylesheet" href="./styles.css?v=4">
+    <link rel="stylesheet" href="./styles.css?v=6">
   </head>
   <body>
     <header class="topbar">
@@ -85,7 +85,18 @@
         <div class="status" id="status">Ready</div>
 
         <section class="view active" id="networkView">
+          <div class="network-toolbar">
+            <button id="focusSelected" class="network-tool-button" type="button" title="選択中のタスクへ移動" aria-label="選択中のタスクへ移動">
+              <span class="tool-icon">◎</span>
+              <span>選択へ移動</span>
+            </button>
+            <div class="density-toggle" aria-label="表示密度">
+              <button class="density-option active" type="button" data-density="standard" aria-pressed="true">標準</button>
+              <button class="density-option" type="button" data-density="compact" aria-pressed="false">コンパクト</button>
+            </div>
+          </div>
           <div class="network" id="network">
+            <div id="areaBands" class="area-bands"></div>
             <svg id="edges" class="edges"></svg>
             <div id="nodes" class="nodes"></div>
           </div>
@@ -121,6 +132,6 @@
       <aside class="inspector" id="inspector"></aside>
     </main>
 
-    <script src="./app.js?v=4"></script>
+    <script src="./app.js?v=6"></script>
   </body>
 </html>

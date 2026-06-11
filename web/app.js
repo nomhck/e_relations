@@ -1,6 +1,14 @@
 const STORAGE_KEY = "e-relations-gui-v1";
-const NODE_W = 196;
-const NODE_H = 132;
+const NODE_SIZES = {
+  standard: { width: 196, height: 132, rowGap: 34 },
+  compact: { width: 168, height: 96, rowGap: 24 }
+};
+const NETWORK_MIN_W = 1350;
+const NETWORK_MIN_H = 820;
+const LAYOUT_MARGIN_X = 48;
+const LAYOUT_MARGIN_Y = 54;
+const LAYOUT_COL_W = 245;
+const LAYOUT_AREA_GAP = 68;
 const DAY_W = 18;
 const DEFAULT_AREAS = ["Engineering", "Procurement", "Fabrication", "Construction", "Commissioning"];
 const AREA_COLORS = ["#287d7c", "#315d95", "#8b5a2b", "#6d7f3f", "#8d4970", "#5b6f92", "#9a5a34"];
@@ -23,6 +31,7 @@ let schedule = null;
 let drag = null;
 let skipClick = false;
 let remoteSaveTimer = null;
+let networkBounds = { width: NETWORK_MIN_W, height: NETWORK_MIN_H };
 
 const $ = (selector) => document.querySelector(selector);
 const els = {};
@@ -35,6 +44,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     focusList: $("#focusList"),
     status: $("#status"),
     network: $("#network"),
+    areaBands: $("#areaBands"),
     edges: $("#edges"),
     nodes: $("#nodes"),
     gantt: $("#gantt"),
@@ -48,7 +58,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     linkSettings: $("#linkSettings"),
     relationType: $("#relationType"),
     lagDays: $("#lagDays"),
-    edgeLabel: $("#edgeLabel")
+    edgeLabel: $("#edgeLabel"),
+    networkView: $("#networkView"),
+    focusSelected: $("#focusSelected"),
+    densityButtons: [...document.querySelectorAll("[data-density]")]
   });
 
   bindEvents();
@@ -71,7 +84,7 @@ function bindEvents() {
     autoLayout();
     saveState();
     render();
-    setStatus("自動整列しました");
+    setStatus("重なりを避けて自動整列しました");
   });
   els.resetData.addEventListener("click", () => {
     // Reset returns the browser to the built-in sample EPC plan.
@@ -105,6 +118,15 @@ function bindEvents() {
   };
   els.edgeLabel.addEventListener("input", syncEdgeLabel);
   els.edgeLabel.addEventListener("change", syncEdgeLabel);
+  els.focusSelected.addEventListener("click", focusSelectedTask);
+  els.densityButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      state.networkDensity = button.dataset.density === "compact" ? "compact" : "standard";
+      saveState();
+      render();
+      setStatus(state.networkDensity === "compact" ? "コンパクト表示にしました" : "標準表示にしました");
+    });
+  });
 
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -129,6 +151,14 @@ function bindEvents() {
       return;
     }
 
+    const criticalButton = event.target.closest("[data-critical-only]");
+    if (criticalButton) {
+      state.criticalOnly = !state.criticalOnly;
+      saveState();
+      render();
+      return;
+    }
+
     const button = event.target.closest("[data-area]");
     if (!button) return;
     state.area = button.dataset.area;
@@ -143,6 +173,7 @@ function bindEvents() {
   });
 
   els.nodes.addEventListener("pointerdown", startDrag);
+  els.edges.addEventListener("click", onEdgeClick);
   els.nodes.addEventListener("click", (event) => {
     // Dragging a node also emits a click, so skipClick suppresses that accidental selection.
     if (skipClick) return;
@@ -229,8 +260,11 @@ function seedState() {
     area: "all",
     search: "",
     selected: "t4",
+    selectedDependency: null,
     linkMode: false,
     linkSource: null,
+    criticalOnly: false,
+    networkDensity: "standard",
     relationType: "FS",
     lagDays: 0,
     edgeLabel: "",
@@ -290,6 +324,13 @@ function render() {
   els.relationType.value = state.relationType || "FS";
   els.lagDays.value = state.lagDays || 0;
   els.edgeLabel.value = state.edgeLabel || "";
+  ensureSelectedVisible();
+  els.focusSelected.disabled = !getTask(state.selected);
+  els.densityButtons.forEach((button) => {
+    const active = button.dataset.density === state.networkDensity;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
 
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.view === state.view);
@@ -357,6 +398,10 @@ function renderFilters() {
       </button>
       `).join("")}
     </div>
+    <button class="chip critical-filter ${state.criticalOnly ? "active" : ""}" type="button" data-critical-only>
+      <span>クリティカルのみ</span>
+      <span class="badge">${[...schedule.items.values()].filter((item) => item.critical).length}</span>
+    </button>
     <div class="area-manager">
       <input data-new-area type="text" maxlength="24" placeholder="所属/領域を追加">
       <button type="button" data-add-area>追加</button>
@@ -407,7 +452,15 @@ function renderFocus() {
 function renderNetwork() {
   const visible = visibleTasks();
   const visibleIds = new Set(visible.map((taskItem) => taskItem.id));
-  renderEdges(visibleIds);
+  const size = nodeSize();
+  networkBounds = calculateNetworkBounds(visible);
+  els.network.style.width = `${networkBounds.width}px`;
+  els.network.style.height = `${networkBounds.height}px`;
+  els.network.style.setProperty("--node-width", `${size.width}px`);
+  els.network.style.setProperty("--node-height", `${size.height}px`);
+  els.network.classList.toggle("compact", state.networkDensity === "compact");
+  renderAreaBands(visible, networkBounds);
+  renderEdges(visibleIds, networkBounds);
 
   els.nodes.innerHTML = visible
     .map((taskItem) => {
@@ -437,11 +490,10 @@ function renderNetwork() {
 }
 
 // Draw dependency edges with spread ports so multiple links do not fully overlap.
-function renderEdges(visibleIds) {
+function renderEdges(visibleIds, bounds = networkBounds) {
   const map = new Map(state.tasks.map((taskItem) => [taskItem.id, taskItem]));
-  const width = 1350;
-  const height = 820;
-  els.edges.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  const size = nodeSize();
+  els.edges.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
 
   const defs = `
     <defs>
@@ -466,10 +518,10 @@ function renderEdges(visibleIds) {
       const toData = schedule.items.get(item.to);
       const meta = portMeta.get(item.id);
       const forward = to.x >= from.x;
-      const x1 = forward ? from.x + NODE_W : from.x;
-      const x2 = forward ? to.x : to.x + NODE_W;
-      const y1 = from.y + NODE_H / 2 + meta.fromOffset;
-      const y2 = to.y + NODE_H / 2 + meta.toOffset;
+      const x1 = forward ? from.x + size.width : from.x;
+      const x2 = forward ? to.x : to.x + size.width;
+      const y1 = from.y + size.height / 2 + meta.fromOffset;
+      const y2 = to.y + size.height / 2 + meta.toOffset;
       const direction = forward ? 1 : -1;
       const routeOffset = ((index % 7) - 3) * 18;
       const distanceX = Math.abs(x2 - x1);
@@ -484,15 +536,69 @@ function renderEdges(visibleIds) {
       const label = dependencyLabel(item);
       const labelX = (x1 + x2) / 2;
       const labelY = (y1 + y2) / 2 + bend * 0.45 - 8;
+      const selected = state.selectedDependency === item.id;
+      const path = `M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`;
 
       return `
-        <path class="edge ${critical ? "critical" : ""}" d="M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}" marker-end="url(#${critical ? "arrowCritical" : "arrow"})"></path>
-        <text class="edge-label" x="${labelX}" y="${labelY}">${escapeHtml(label)}</text>
+        <g class="edge-group ${selected ? "selected" : ""}" data-dependency-id="${escapeAttr(item.id)}">
+          <path class="edge-hit" d="${path}"></path>
+          <path class="edge ${critical ? "critical" : ""} ${selected ? "selected" : ""}" d="${path}" marker-end="url(#${critical ? "arrowCritical" : "arrow"})"></path>
+          <text class="edge-label ${selected ? "selected" : ""}" x="${labelX}" y="${labelY}">${escapeHtml(label)}</text>
+        </g>
       `;
     })
     .join("");
 
   els.edges.innerHTML = defs + paths;
+}
+
+// Render horizontal area bands behind nodes so the expanded layout remains readable.
+function renderAreaBands(tasks, bounds) {
+  const size = nodeSize();
+  const groups = new Map();
+  tasks.forEach((taskItem) => {
+    if (!groups.has(taskItem.area)) groups.set(taskItem.area, []);
+    groups.get(taskItem.area).push(taskItem);
+  });
+
+  els.areaBands.innerHTML = [...groups.entries()]
+    .map(([area, areaTasks]) => {
+      const minY = Math.min(...areaTasks.map((taskItem) => taskItem.y));
+      const maxY = Math.max(...areaTasks.map((taskItem) => taskItem.y + size.height));
+      const top = Math.max(0, minY - 28);
+      const height = Math.max(size.height + 56, maxY - minY + 56);
+      return `
+        <div class="area-band" style="top:${top}px;height:${height}px;width:${bounds.width}px;--area-color:${areaColor(area)}">
+          <span>${escapeHtml(area)}</span>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+// Scroll the network canvas so the selected task is centered and easy to spot.
+function focusSelectedTask(options = {}) {
+  const selected = getTask(state.selected);
+  const node = findNodeElement(state.selected);
+  if (!selected || !node) {
+    if (!options.silent) setStatus("表示中のタスクを選択してください", "warn");
+    return;
+  }
+
+  const size = nodeSize();
+  const networkLeft = els.network.offsetLeft;
+  const networkTop = els.network.offsetTop;
+  const left = clamp(networkLeft + selected.x - els.networkView.clientWidth / 2 + size.width / 2, 0, Math.max(0, els.networkView.scrollWidth - els.networkView.clientWidth), 0);
+  const top = clamp(networkTop + selected.y - els.networkView.clientHeight / 2 + size.height / 2, 0, Math.max(0, els.networkView.scrollHeight - els.networkView.clientHeight), 0);
+  els.networkView.scrollTo({ left, top, behavior: "smooth" });
+  node.classList.remove("focus-pulse");
+  void node.offsetWidth;
+  node.classList.add("focus-pulse");
+  node.addEventListener("animationend", () => node.classList.remove("focus-pulse"), { once: true });
+
+  if (!options.silent) {
+    setStatus(`選択タスクへ移動: ${selected.code} ${selected.name}`);
+  }
 }
 
 // Compute vertical offsets for each edge endpoint so fan-in/fan-out links are distinguishable.
@@ -619,6 +725,9 @@ function renderInspector() {
       <div class="eyebrow">詳細</div>
       <h2>${escapeHtml(selected.code)} ${escapeHtml(selected.name)}</h2>
       <p class="note ${timing.severity}">${escapeHtml(timing.label)} · ${data.critical ? "クリティカルタスク" : `余裕 ${Math.round(data.float)}日`}</p>
+      <div class="inspector-actions">
+        <button type="button" class="delete-task-button" data-delete-task="${escapeAttr(selected.id)}">タスク削除</button>
+      </div>
       <div class="field-grid">
         <label class="wide">タスク名
           <input data-inspector="name" value="${escapeAttr(selected.name)}">
@@ -669,6 +778,7 @@ function renderInspector() {
 function onNodeClick(id) {
   if (!state.linkMode) {
     state.selected = id;
+    state.selectedDependency = null;
     saveState();
     render();
     return;
@@ -677,34 +787,58 @@ function onNodeClick(id) {
   if (!state.linkSource || state.linkSource === id) {
     state.linkSource = state.linkSource === id ? null : id;
     state.selected = id;
+    state.selectedDependency = null;
     saveState();
     render();
     return;
   }
 
+  const existing = state.dependencies.find((item) => item.from === state.linkSource && item.to === id);
   const nextDeps = [
     ...state.dependencies,
     dep(`d${Date.now()}`, state.linkSource, id, state.relationType, clamp(parseInt(state.lagDays, 10), -30, 90, 0), state.edgeLabel)
   ];
 
-  if (hasCycle(state.tasks, nextDeps)) {
+  if (!existing && hasCycle(state.tasks, nextDeps)) {
     // Reject cycles immediately so the schedule calculation remains a DAG.
     setStatus("循環依存になるため接続できません", "error");
     return;
   }
 
-  const existing = state.dependencies.find((item) => item.from === state.linkSource && item.to === id);
   if (existing) {
     existing.type = state.relationType;
     existing.lag = state.lagDays;
     existing.label = state.edgeLabel;
+    state.selectedDependency = existing.id;
   } else {
     state.dependencies = nextDeps;
+    state.selectedDependency = nextDeps[nextDeps.length - 1].id;
   }
 
   state.selected = id;
   saveState();
   render();
+  requestAnimationFrame(() => focusDependencyRow(state.selectedDependency));
+}
+
+// Clicking a dependency line selects that relation and exposes its editor row.
+function onEdgeClick(event) {
+  const group = event.target.closest("[data-dependency-id]");
+  if (!group) return;
+  const item = state.dependencies.find((depItem) => depItem.id === group.dataset.dependencyId);
+  if (!item) return;
+
+  state.linkMode = false;
+  state.linkSource = null;
+  state.selectedDependency = item.id;
+  state.selected = [item.from, item.to].includes(state.selected) ? state.selected : item.to;
+  saveState();
+  render();
+  requestAnimationFrame(() => focusDependencyRow(item.id));
+
+  const from = getTask(item.from);
+  const to = getTask(item.to);
+  setStatus(`依存線を選択: ${from?.code || item.from} → ${to?.code || item.to}`);
 }
 
 // Start dragging a task node in the network view.
@@ -733,11 +867,12 @@ function moveDrag(event) {
   const dx = event.clientX - drag.sx;
   const dy = event.clientY - drag.sy;
   if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
-  taskItem.x = clamp(drag.ox + dx, 8, 1150, drag.ox);
-  taskItem.y = clamp(drag.oy + dy, 8, 700, drag.oy);
+  const size = nodeSize();
+  taskItem.x = clamp(drag.ox + dx, 8, Math.max(8, networkBounds.width - size.width - 24), drag.ox);
+  taskItem.y = clamp(drag.oy + dy, 8, Math.max(8, networkBounds.height - size.height - 24), drag.oy);
   drag.node.style.left = `${taskItem.x}px`;
   drag.node.style.top = `${taskItem.y}px`;
-  renderEdges(new Set(visibleTasks().map((task) => task.id)));
+  renderEdges(new Set(visibleTasks().map((task) => task.id)), networkBounds);
 }
 
 // Finish node dragging, persist the new position, and suppress the following synthetic click.
@@ -784,9 +919,16 @@ function onInspectorInput(event) {
 
 // Handle dependency deletion from the selected task detail panel.
 function onInspectorClick(event) {
+  const deleteTaskButton = event.target.closest("[data-delete-task]");
+  if (deleteTaskButton) {
+    deleteTask(deleteTaskButton.dataset.deleteTask);
+    return;
+  }
+
   const deleteButton = event.target.closest("[data-delete-dependency]");
   if (!deleteButton) return;
   state.dependencies = state.dependencies.filter((item) => item.id !== deleteButton.dataset.deleteDependency);
+  if (state.selectedDependency === deleteButton.dataset.deleteDependency) state.selectedDependency = null;
   saveState();
   render();
 }
@@ -804,6 +946,7 @@ function updateTask(id, field, value) {
   else taskItem[field] = String(value).trim() || taskItem[field];
   if (field === "area" && !state.areas.includes(taskItem.area)) state.areas.push(taskItem.area);
   state.selected = id;
+  state.selectedDependency = null;
   saveState();
   render();
 }
@@ -815,8 +958,29 @@ function updateDependency(id, field, value) {
   if (field === "type") item.type = RELATIONS.includes(value) ? value : item.type;
   else if (field === "lag") item.lag = clamp(parseInt(value, 10), -30, 90, item.lag);
   else if (field === "label") item.label = String(value).trim().slice(0, 30);
+  state.selectedDependency = id;
   saveState();
   render();
+}
+
+// Delete a task and its connected dependencies after an explicit confirmation.
+function deleteTask(id) {
+  const taskItem = getTask(id);
+  if (!taskItem) return;
+  const connectedCount = state.dependencies.filter((item) => item.from === id || item.to === id).length;
+  const message = connectedCount
+    ? `${taskItem.code} ${taskItem.name} を削除します。関連する依存線 ${connectedCount} 本も削除されます。`
+    : `${taskItem.code} ${taskItem.name} を削除します。`;
+  if (!window.confirm(message)) return;
+
+  state.tasks = state.tasks.filter((item) => item.id !== id);
+  state.dependencies = state.dependencies.filter((item) => item.from !== id && item.to !== id);
+  if (state.linkSource === id) state.linkSource = null;
+  if (!state.dependencies.some((item) => item.id === state.selectedDependency)) state.selectedDependency = null;
+  state.selected = state.tasks[0]?.id || null;
+  saveState();
+  render();
+  setStatus("タスクを削除しました");
 }
 
 // Add a new task in the current area filter, then select it for editing.
@@ -825,22 +989,89 @@ function addTask() {
   const taskItem = task(id, `N${state.tasks.length + 1}`, "新規タスク", state.area === "all" ? getAreas()[0] : state.area, "", 5, 80, 120);
   state.tasks.push(taskItem);
   state.selected = id;
+  state.selectedDependency = null;
   saveState();
   render();
 }
 
-// Place tasks in area lanes based on calculated earliest start.
+// Place tasks by dependency generation and stack same-column tasks to avoid overlap.
 function autoLayout() {
-  const byArea = new Map();
   const areas = getAreas();
-  const sorted = state.tasks.slice().sort((a, b) => schedule.items.get(a.id).es - schedule.items.get(b.id).es);
-  sorted.forEach((taskItem) => {
-    const lane = byArea.get(taskItem.area) || 0;
-    byArea.set(taskItem.area, lane + 1);
-    const areaIndex = Math.max(0, areas.indexOf(taskItem.area));
-    taskItem.x = 40 + Math.min(5, Math.floor(schedule.items.get(taskItem.id).es / 20)) * 235;
-    taskItem.y = 70 + areaIndex * 145 + (lane % 2) * 24;
+  const generations = computeDependencyGenerations();
+  const rowHeight = layoutRowHeight();
+  let areaTop = LAYOUT_MARGIN_Y;
+
+  areas.forEach((area) => {
+    const areaTasks = state.tasks.filter((taskItem) => taskItem.area === area);
+    if (!areaTasks.length) return;
+
+    const byColumn = new Map();
+    areaTasks
+      .slice()
+      .sort((a, b) => {
+        const aGen = generations.get(a.id) || 0;
+        const bGen = generations.get(b.id) || 0;
+        return aGen - bGen || schedule.items.get(a.id).es - schedule.items.get(b.id).es || a.code.localeCompare(b.code);
+      })
+      .forEach((taskItem) => {
+        const column = generations.get(taskItem.id) || 0;
+        if (!byColumn.has(column)) byColumn.set(column, []);
+        byColumn.get(column).push(taskItem);
+      });
+
+    let maxRows = 1;
+    byColumn.forEach((tasksInColumn, column) => {
+      maxRows = Math.max(maxRows, tasksInColumn.length);
+      tasksInColumn.forEach((taskItem, row) => {
+        taskItem.x = LAYOUT_MARGIN_X + column * LAYOUT_COL_W;
+        taskItem.y = areaTop + row * rowHeight;
+      });
+    });
+
+    areaTop += maxRows * rowHeight + LAYOUT_AREA_GAP;
   });
+}
+
+// Compute a stable left-to-right generation for dependencies so successors move right.
+function computeDependencyGenerations() {
+  const ids = new Set(state.tasks.map((taskItem) => taskItem.id));
+  const outgoing = new Map(state.tasks.map((taskItem) => [taskItem.id, []]));
+  const indegree = new Map(state.tasks.map((taskItem) => [taskItem.id, 0]));
+  const generations = new Map(state.tasks.map((taskItem) => [taskItem.id, 0]));
+
+  state.dependencies.forEach((item) => {
+    if (!ids.has(item.from) || !ids.has(item.to)) return;
+    outgoing.get(item.from).push(item.to);
+    indegree.set(item.to, indegree.get(item.to) + 1);
+  });
+
+  const queue = state.tasks
+    .filter((taskItem) => indegree.get(taskItem.id) === 0)
+    .sort((a, b) => a.code.localeCompare(b.code))
+    .map((taskItem) => taskItem.id);
+
+  while (queue.length) {
+    const id = queue.shift();
+    outgoing.get(id).forEach((to) => {
+      generations.set(to, Math.max(generations.get(to) || 0, (generations.get(id) || 0) + 1));
+      indegree.set(to, indegree.get(to) - 1);
+      if (indegree.get(to) === 0) queue.push(to);
+    });
+  }
+
+  return generations;
+}
+
+// Size the network canvas around visible nodes so auto-layout can expand naturally.
+function calculateNetworkBounds(tasks) {
+  const size = nodeSize();
+  if (!tasks.length) return { width: NETWORK_MIN_W, height: NETWORK_MIN_H };
+  const maxX = Math.max(...tasks.map((taskItem) => taskItem.x + size.width));
+  const maxY = Math.max(...tasks.map((taskItem) => taskItem.y + size.height));
+  return {
+    width: Math.max(NETWORK_MIN_W, Math.ceil(maxX + LAYOUT_MARGIN_X)),
+    height: Math.max(NETWORK_MIN_H, Math.ceil(maxY + LAYOUT_MARGIN_Y))
+  };
 }
 
 // Calculate CPM-style earliest/latest dates, total duration, float, and critical flags.
@@ -952,9 +1183,22 @@ function visibleTasks() {
   const q = (state.search || "").toLowerCase();
   return state.tasks.filter((taskItem) => {
     const areaOk = state.area === "all" || taskItem.area === state.area;
+    const criticalOk = !state.criticalOnly || schedule.items.get(taskItem.id)?.critical;
     const text = `${taskItem.code} ${taskItem.name} ${taskItem.owner} ${taskItem.area} ${taskItem.description} ${taskItem.status} ${taskItem.level}`.toLowerCase();
-    return areaOk && (!q || text.includes(q));
+    return areaOk && criticalOk && (!q || text.includes(q));
   });
+}
+
+// Keep the detail panel aligned with the current filters.
+function ensureSelectedVisible() {
+  const visible = visibleTasks();
+  if (!visible.length) {
+    state.selected = null;
+    return;
+  }
+  if (!visible.some((taskItem) => taskItem.id === state.selected)) {
+    state.selected = visible[0].id;
+  }
 }
 
 // Return predecessor summaries for table display.
@@ -977,6 +1221,7 @@ function getTask(id) {
 function normalizeState(raw) {
   if (!raw || !Array.isArray(raw.tasks) || !Array.isArray(raw.dependencies)) return seedState();
   const tasks = raw.tasks.map(normalizeTask);
+  const dependencies = raw.dependencies.map(normalizeDependency);
   const taskAreas = tasks.map((taskItem) => taskItem.area).filter(Boolean);
   const areas = unique([...(Array.isArray(raw.areas) ? raw.areas : []), ...DEFAULT_AREAS, ...taskAreas]);
   const area = raw.area === "all" || areas.includes(raw.area) ? raw.area : "all";
@@ -987,14 +1232,17 @@ function normalizeState(raw) {
     area,
     search: raw.search || "",
     selected: tasks.some((taskItem) => taskItem.id === raw.selected) ? raw.selected : tasks[0]?.id,
+    selectedDependency: dependencies.some((item) => item.id === raw.selectedDependency) ? raw.selectedDependency : null,
     linkMode: Boolean(raw.linkMode),
     linkSource: raw.linkSource || null,
+    criticalOnly: Boolean(raw.criticalOnly),
+    networkDensity: raw.networkDensity === "compact" ? "compact" : "standard",
     relationType: RELATIONS.includes(raw.relationType) ? raw.relationType : "FS",
     lagDays: clamp(parseInt(raw.lagDays, 10), -30, 90, 0),
     edgeLabel: String(raw.edgeLabel || "").slice(0, 30),
     areas,
     tasks,
-    dependencies: raw.dependencies.map(normalizeDependency)
+    dependencies
   };
 }
 
@@ -1035,28 +1283,60 @@ function normalizeDependency(raw) {
 
 // Render dependency rows connected from the selected task.
 function renderDependencyEditor(taskId) {
+  const incoming = state.dependencies.filter((item) => item.to === taskId);
   const outgoing = state.dependencies.filter((item) => item.from === taskId);
-  if (!outgoing.length) {
-    return `<div class="dependency-editor"><h3>後続依存</h3><p class="note">接続モードで後続タスクを選ぶと追加できます。</p></div>`;
-  }
 
   return `
     <div class="dependency-editor">
-      <h3>後続依存</h3>
-      ${outgoing.map((item) => {
-        const target = getTask(item.to);
-        return `
-          <div class="dependency-row" data-dependency-id="${escapeAttr(item.id)}">
-            <strong>→ ${escapeHtml(target ? `${target.code} ${target.name}` : item.to)}</strong>
-            <select data-dependency-field="type">${RELATIONS.map((type) => `<option value="${type}" ${type === item.type ? "selected" : ""}>${type}</option>`).join("")}</select>
-            <input data-dependency-field="lag" type="number" min="-30" max="90" value="${item.lag}">
-            <input data-dependency-field="label" maxlength="30" placeholder="ラベル" value="${escapeAttr(item.label || "")}">
-            <button type="button" data-delete-dependency="${escapeAttr(item.id)}">削除</button>
-          </div>
-        `;
-      }).join("")}
+      ${renderDependencyGroup("先行依存", incoming, "from")}
+      ${renderDependencyGroup("後続依存", outgoing, "to")}
+      ${incoming.length || outgoing.length ? "" : `<p class="note">依存線はありません。依存接続でタスク同士をつなげます。</p>`}
     </div>
   `;
+}
+
+// Render one dependency section for predecessor or successor links.
+function renderDependencyGroup(title, items, peerField) {
+  return `
+    <div class="dependency-group">
+      <h3>${title}</h3>
+      ${items.length ? items.map((item) => renderDependencyRow(item, peerField)).join("") : `<p class="note">なし</p>`}
+    </div>
+  `;
+}
+
+// Render one editable dependency row.
+function renderDependencyRow(item, peerField) {
+  const peer = getTask(item[peerField]);
+  const arrow = peerField === "from" ? "←" : "→";
+  return `
+    <div class="dependency-row ${state.selectedDependency === item.id ? "selected-dependency" : ""}" data-dependency-id="${escapeAttr(item.id)}">
+      <strong>${arrow} ${escapeHtml(peer ? `${peer.code} ${peer.name}` : item[peerField])}</strong>
+      <select data-dependency-field="type">${RELATIONS.map((type) => `<option value="${type}" ${type === item.type ? "selected" : ""}>${type}</option>`).join("")}</select>
+      <input data-dependency-field="lag" type="number" min="-30" max="90" value="${item.lag}">
+      <input data-dependency-field="label" maxlength="30" placeholder="線ラベル" value="${escapeAttr(item.label || "")}">
+      <button type="button" data-delete-dependency="${escapeAttr(item.id)}">削除</button>
+    </div>
+  `;
+}
+
+function nodeSize() {
+  return NODE_SIZES[state.networkDensity === "compact" ? "compact" : "standard"];
+}
+
+function layoutRowHeight() {
+  const size = nodeSize();
+  return size.height + size.rowGap;
+}
+
+function findNodeElement(id) {
+  return [...els.nodes.querySelectorAll(".node")].find((node) => node.dataset.id === id);
+}
+
+function focusDependencyRow(id) {
+  const row = [...els.inspector.querySelectorAll("[data-dependency-id]")].find((item) => item.dataset.dependencyId === id);
+  if (!row) return;
+  row.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 // Add a custom affiliation/area used by filters and task editors.
