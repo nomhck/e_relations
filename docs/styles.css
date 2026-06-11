@@ -1,16 +1,16 @@
 :root {
-  --bg: #f4f6f1;
+  --bg: #f6f8fc;
   --panel: #ffffff;
-  --panel-soft: #f9faf6;
-  --text: #17211d;
-  --muted: #65736b;
-  --line: #d7ded5;
-  --teal: #287d7c;
-  --teal-dark: #176260;
-  --red: #b74645;
-  --orange: #d26b2c;
-  --blue: #315d95;
-  --shadow: 0 12px 28px rgba(23, 33, 29, 0.09);
+  --panel-soft: #f8fafd;
+  --text: #202124;
+  --muted: #5f6368;
+  --line: #dadce0;
+  --teal: #1a73e8;
+  --teal-dark: #0b57d0;
+  --red: #b3261e;
+  --orange: #f29900;
+  --blue: #1967d2;
+  --shadow: 0 10px 24px rgba(60, 64, 67, 0.12);
 }
 
 * {
@@ -43,8 +43,8 @@ button {
   gap: 14px;
   align-items: center;
   padding: 14px 18px;
-  border-bottom: 1px solid #cbd4cd;
-  background: #fffefa;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
 }
 
 .brand {
@@ -59,7 +59,7 @@ button {
   display: grid;
   place-items: center;
   border-radius: 8px;
-  background: #19342f;
+  background: var(--teal-dark);
   color: #fff;
   font-weight: 800;
 }
@@ -94,7 +94,7 @@ button {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border: 1px solid #b9c4bc;
+  border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
   color: var(--text);
@@ -115,20 +115,20 @@ button {
 
 .actions .action-button.active {
   border-color: var(--orange);
-  background: #fff3e8;
-  color: #9a4c1e;
+  background: #fff8e1;
+  color: #8a4b00;
 }
 
 .actions .action-button.active .action-icon {
-  color: #9a4c1e;
+  color: #8a4b00;
 }
 
 .actions .action-button.danger {
-  color: #6c514d;
+  color: #5f6368;
 }
 
 .actions .action-button.danger .action-icon {
-  color: #8f2c2b;
+  color: var(--red);
 }
 
 .link-settings {
@@ -156,7 +156,7 @@ button {
 .link-settings input,
 .search {
   height: 34px;
-  border: 1px solid #bac5bd;
+  border: 1px solid var(--line);
   border-radius: 7px;
   background: #fff;
   padding: 0 9px;
@@ -274,13 +274,13 @@ button {
 
 .chip.active {
   border-color: var(--teal);
-  background: #e7f2f1;
+  background: #e8f0fe;
 }
 
 .critical-filter.active {
   border-color: var(--red);
-  background: #fff0ef;
-  color: #8f2c2b;
+  background: #fce8e6;
+  color: var(--red);
 }
 
 .badge {
@@ -289,7 +289,7 @@ button {
   display: inline-grid;
   place-items: center;
   border-radius: 999px;
-  background: #e9ece7;
+  background: #eef2f7;
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
@@ -314,7 +314,7 @@ button {
 .area-manager button,
 .area-row button {
   min-height: 32px;
-  border: 1px solid #bac5bd;
+  border: 1px solid var(--line);
   border-radius: 7px;
   background: #fff;
   padding: 5px 8px;
@@ -356,7 +356,7 @@ button {
 .focus-item {
   align-items: flex-start;
   flex-direction: column;
-  background: #fff8ed;
+  background: #fff8e1;
 }
 
 .focus-item strong {
@@ -385,7 +385,7 @@ button {
   gap: 12px;
   padding: 12px;
   border-bottom: 1px solid var(--line);
-  background: #fbfcf8;
+  background: #fff;
 }
 
 .tabs {
@@ -396,7 +396,7 @@ button {
   padding: 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #eef1ec;
+  background: #eef2f7;
 }
 
 .tab {
@@ -431,13 +431,13 @@ button {
 }
 
 .status.warn {
-  color: #7c3e18;
-  background: #fff5e8;
+  color: #8a4b00;
+  background: #fff8e1;
 }
 
 .status.error {
-  color: #8f2c2b;
-  background: #fff0ef;
+  color: var(--red);
+  background: #fce8e6;
 }
 
 .view {
@@ -452,7 +452,7 @@ button {
 
 #networkView {
   overflow: auto;
-  background: #eef1ec;
+  background: #eef2f7;
 }
 
 .network-toolbar {
@@ -467,14 +467,14 @@ button {
   gap: 8px;
   padding: 8px 10px;
   border-bottom: 1px solid var(--line);
-  background: rgba(251, 252, 248, 0.94);
+  background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(8px);
 }
 
 .network-tool-button,
 .density-option {
   min-height: 32px;
-  border: 1px solid #bac5bd;
+  border: 1px solid var(--line);
   border-radius: 7px;
   background: #fff;
   color: var(--text);
@@ -506,7 +506,7 @@ button {
   padding: 3px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #eef1ec;
+  background: #eef2f7;
 }
 
 .density-option {
@@ -529,9 +529,9 @@ button {
   --node-width: 196px;
   --node-height: 132px;
   background:
-    linear-gradient(#dfe5de 1px, transparent 1px),
-    linear-gradient(90deg, #dfe5de 1px, transparent 1px),
-    #f8faf6;
+    linear-gradient(#e8eaed 1px, transparent 1px),
+    linear-gradient(90deg, #e8eaed 1px, transparent 1px),
+    #fff;
   background-size: 28px 28px;
 }
 
@@ -550,9 +550,9 @@ button {
 .area-band {
   position: absolute;
   left: 0;
-  border-top: 1px solid color-mix(in srgb, var(--area-color) 28%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--area-color) 18%, transparent);
-  background: linear-gradient(90deg, color-mix(in srgb, var(--area-color) 11%, transparent), transparent 62%);
+  border-top: 1px solid color-mix(in srgb, var(--area-color) 14%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--area-color) 10%, transparent);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--area-color) 5%, transparent), transparent 64%);
 }
 
 .area-band span {
@@ -563,10 +563,10 @@ button {
   min-height: 24px;
   align-items: center;
   margin: 8px 0 0 12px;
-  border: 1px solid color-mix(in srgb, var(--area-color) 35%, #d7ded5);
+  border: 1px solid color-mix(in srgb, var(--area-color) 24%, var(--line));
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.82);
-  color: #34413b;
+  background: rgba(255, 255, 255, 0.9);
+  color: #3c4043;
   padding: 3px 9px;
   font-size: 11px;
   font-weight: 800;
@@ -586,7 +586,7 @@ button {
 
 .edge {
   fill: none;
-  stroke: #708079;
+  stroke: #80868b;
   stroke-width: 2;
   pointer-events: none;
 }
@@ -612,16 +612,16 @@ button {
 .edge-label {
   font-size: 11px;
   font-weight: 800;
-  fill: #405049;
+  fill: #3c4043;
   paint-order: stroke;
-  stroke: #f8faf6;
+  stroke: #fff;
   stroke-width: 4px;
   cursor: pointer;
   pointer-events: auto;
 }
 
 .edge-label.selected {
-  fill: #8b4319;
+  fill: #8a4b00;
 }
 
 .node {
@@ -629,11 +629,11 @@ button {
   width: var(--node-width);
   height: var(--node-height);
   padding: 11px;
-  border: 1px solid #bcc8c0;
+  border: 1px solid var(--line);
   border-left: 5px solid var(--area-color, var(--teal));
   border-radius: 8px;
   background: #fff;
-  box-shadow: 0 9px 18px rgba(23, 33, 29, 0.12);
+  box-shadow: 0 8px 18px rgba(60, 64, 67, 0.14);
   cursor: grab;
   overflow: hidden;
   pointer-events: auto;
@@ -641,7 +641,7 @@ button {
 }
 
 .node.selected {
-  outline: 3px solid rgba(40, 125, 124, 0.24);
+  outline: 3px solid rgba(26, 115, 232, 0.2);
   border-color: var(--teal);
 }
 
@@ -650,7 +650,7 @@ button {
 }
 
 .node.link-source {
-  outline: 3px solid rgba(210, 107, 44, 0.28);
+  outline: 3px solid rgba(242, 153, 0, 0.28);
   border-color: var(--orange);
 }
 
@@ -708,29 +708,29 @@ button {
 }
 
 .status-badge.todo {
-  background: #ecefea;
+  background: #eef2f7;
   color: #58655d;
 }
 
 .status-badge.doing {
-  background: #e6f0fb;
-  color: #27527f;
+  background: #e8f0fe;
+  color: #174ea6;
 }
 
 .status-badge.done {
-  background: #e4f3e8;
-  color: #2f7043;
+  background: #e6f4ea;
+  color: #137333;
 }
 
 .status-badge.delayStart,
 .status-badge.delayEnd {
-  background: #fff0ef;
-  color: #9c3837;
+  background: #fce8e6;
+  color: var(--red);
 }
 
 .level-chip {
-  background: #f5efe7;
-  color: #7b532f;
+  background: #fef7e0;
+  color: #8a4b00;
 }
 
 .node-meta {
@@ -744,7 +744,7 @@ button {
   margin-top: 8px;
   overflow: hidden;
   border-radius: 999px;
-  background: #e5eae4;
+  background: #edf1f7;
 }
 
 .progress span {
@@ -787,11 +787,11 @@ button {
 
 @keyframes focusPulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(40, 125, 124, 0.5), 0 9px 18px rgba(23, 33, 29, 0.12);
+    box-shadow: 0 0 0 0 rgba(26, 115, 232, 0.45), 0 8px 18px rgba(60, 64, 67, 0.14);
   }
 
   100% {
-    box-shadow: 0 0 0 18px rgba(40, 125, 124, 0), 0 9px 18px rgba(23, 33, 29, 0.12);
+    box-shadow: 0 0 0 18px rgba(26, 115, 232, 0), 0 8px 18px rgba(60, 64, 67, 0.14);
   }
 }
 
@@ -799,7 +799,7 @@ button {
 .table-wrap {
   height: 100%;
   overflow: auto;
-  background: #fbfcf8;
+  background: #fff;
 }
 
 .gantt-chart {
@@ -819,7 +819,7 @@ button {
   z-index: 4;
   min-height: 48px;
   border-bottom: 1px solid var(--line);
-  background: #fbfcf8;
+  background: #fff;
 }
 
 .gantt-label {
@@ -827,7 +827,7 @@ button {
   align-content: center;
   min-width: 0;
   padding: 8px 12px 8px 0;
-  border-bottom: 1px solid #e4e9e3;
+  border-bottom: 1px solid #edf1f7;
 }
 
 .gantt-label strong,
@@ -850,8 +850,8 @@ button {
 .gantt-scale {
   position: relative;
   min-height: 48px;
-  border-bottom: 1px solid #e4e9e3;
-  background-image: linear-gradient(90deg, rgba(216, 222, 213, 0.8) 1px, transparent 1px);
+  border-bottom: 1px solid #edf1f7;
+  background-image: linear-gradient(90deg, rgba(218, 220, 224, 0.72) 1px, transparent 1px);
   background-size: 112px 100%;
 }
 
@@ -860,7 +860,7 @@ button {
   top: 0;
   width: 1px;
   height: 100%;
-  background: #dce3dc;
+  background: #dadce0;
 }
 
 .tick span {
@@ -902,7 +902,7 @@ td {
 th {
   position: sticky;
   top: 0;
-  background: #f1f4ef;
+  background: #f8fafd;
   color: var(--muted);
   font-size: 11px;
 }
@@ -914,14 +914,14 @@ td select,
 .inspector textarea {
   width: 100%;
   min-height: 34px;
-  border: 1px solid #bac5bd;
+  border: 1px solid var(--line);
   border-radius: 7px;
   background: #fff;
   padding: 6px 8px;
 }
 
 tr.selected {
-  background: #ecf6f5;
+  background: #e8f0fe;
 }
 
 .inspector h2 {
@@ -937,10 +937,10 @@ tr.selected {
 
 .delete-task-button {
   min-height: 34px;
-  border: 1px solid #dfb6b4;
+  border: 1px solid #f4b8b3;
   border-radius: 7px;
-  background: #fff5f4;
-  color: #8f2c2b;
+  background: #fce8e6;
+  color: var(--red);
   padding: 6px 10px;
   font-size: 12px;
   font-weight: 800;
@@ -978,7 +978,7 @@ tr.selected {
 }
 
 .note.late {
-  color: #8f2c2b;
+  color: var(--red);
 }
 
 .dependency-editor {
@@ -1009,8 +1009,8 @@ tr.selected {
 }
 
 .dependency-row.selected-dependency {
-  background: #fff3e8;
-  outline: 2px solid rgba(210, 107, 44, 0.25);
+  background: #fff8e1;
+  outline: 2px solid rgba(242, 153, 0, 0.3);
 }
 
 .dependency-row strong {
@@ -1023,10 +1023,10 @@ tr.selected {
 
 .dependency-row button {
   min-height: 34px;
-  border: 1px solid #dfb6b4;
+  border: 1px solid #f4b8b3;
   border-radius: 7px;
-  background: #fff5f4;
-  color: #8f2c2b;
+  background: #fce8e6;
+  color: var(--red);
   font-size: 12px;
   font-weight: 800;
 }

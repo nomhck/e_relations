@@ -11,7 +11,7 @@ const LAYOUT_COL_W = 245;
 const LAYOUT_AREA_GAP = 68;
 const DAY_W = 18;
 const DEFAULT_AREAS = ["Engineering", "Procurement", "Fabrication", "Construction", "Commissioning"];
-const AREA_COLORS = ["#287d7c", "#315d95", "#8b5a2b", "#6d7f3f", "#8d4970", "#5b6f92", "#9a5a34"];
+const AREA_COLORS = ["#1a73e8", "#188038", "#f29900", "#9334e6", "#d93025", "#00796b", "#5f6368"];
 const RELATIONS = ["FS", "SS", "FF", "SF"];
 const STATUSES = [
   ["todo", "未着手"],
@@ -498,10 +498,10 @@ function renderEdges(visibleIds, bounds = networkBounds) {
   const defs = `
     <defs>
       <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="#708079"></path>
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#80868b"></path>
       </marker>
       <marker id="arrowCritical" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="#b74645"></path>
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#b3261e"></path>
       </marker>
     </defs>
   `;
