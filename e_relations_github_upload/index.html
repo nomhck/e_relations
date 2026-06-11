@@ -7,7 +7,9 @@
     <link rel="stylesheet" href="./styles.css?v=4">
   </head>
   <body>
+    <!-- 旧アップロード用の画面コピーです。現行版は web/ と docs/ を参照してください。 -->
     <div class="app-shell">
+      <!-- ヘッダー: ブランド、主要操作、依存線の簡易設定を配置します。 -->
       <header class="topbar">
         <div class="brand" aria-label="EPC Dependency Planner">
           <div class="brand-mark">EPC</div>
@@ -44,7 +46,9 @@
         </div>
       </header>
 
+      <!-- ワークスペース: 左の概要、中央の各ビュー、右の詳細編集で構成します。 -->
       <main class="workspace">
+        <!-- 左サイドバー: プロジェクト概要、領域フィルター、注視項目を表示します。 -->
         <aside class="sidebar">
           <section class="project-panel">
             <div class="panel-kicker">PROJECT</div>
@@ -63,6 +67,7 @@
           </section>
         </aside>
 
+        <!-- 中央ステージ: ネットワーク、ガント、表を切り替えて操作します。 -->
         <section class="stage">
           <div class="stage-header">
             <div class="view-tabs" role="tablist" aria-label="表示切替">
@@ -79,6 +84,7 @@
           <div class="statusbar" id="statusBar">Ready</div>
 
           <div class="view-stack">
+            <!-- ネットワークビュー: タスクノードと依存線を直接操作します。 -->
             <section class="view active" id="networkView" data-view="network" aria-label="ネットワーク図">
               <div class="network-canvas" id="networkCanvas">
                 <svg class="edge-layer" id="edgeLayer" aria-hidden="true"></svg>
@@ -86,10 +92,12 @@
               </div>
             </section>
 
+            <!-- ガントビュー: タスク期間を横棒で確認します。 -->
             <section class="view" id="ganttView" data-view="gantt" aria-label="ガントチャート">
               <div class="gantt-scroller" id="ganttScroller"></div>
             </section>
 
+            <!-- 表ビュー: タスク属性を一覧で編集します。 -->
             <section class="view" id="tableView" data-view="table" aria-label="工程表">
               <div class="table-wrap">
                 <table class="task-table">
@@ -113,6 +121,7 @@
           </div>
         </section>
 
+        <!-- 右ペイン: 選択タスクの詳細を表示・編集します。 -->
         <aside class="inspector" id="inspector">
           <div class="empty-inspector">
             <div class="section-heading">詳細</div>
@@ -122,8 +131,10 @@
       </main>
     </div>
 
+    <!-- JSONインポート用の隠しファイル入力です。 -->
     <input id="importFile" type="file" accept="application/json" hidden>
 
+    <!-- ネットワークノードを描画するときの雛形です。 -->
     <template id="taskNodeTemplate">
       <article class="task-node" tabindex="0">
         <div class="node-topline">

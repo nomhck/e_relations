@@ -1,6 +1,11 @@
+# 依存パッケージとOSが自動生成する不要ファイルです。
 node_modules/
 .DS_Store
+
+# ローカル保存した工程データは、利用者ごとの内容なのでGitに入れません。
 data/plans/*.json
+
+# 秘密情報やAzure/ローカル環境設定は公開リポジトリへ載せません。
 .env
 .env.*
 local.settings.json

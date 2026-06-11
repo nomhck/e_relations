@@ -1,3 +1,4 @@
+/* 旧アップロード用コピーのテーマ定義です。現行デザインは web/styles.css を参照してください。 */
 :root {
   color-scheme: light;
   --bg: #f4f5f0;
@@ -19,6 +20,7 @@
   --node-h: 110px;
 }
 
+/* 基本リセット: 画面全体のサイズ計算とフォントを揃えます。 */
 * {
   box-sizing: border-box;
 }
@@ -48,12 +50,14 @@ button {
   cursor: pointer;
 }
 
+/* アプリ全体の外枠です。ヘッダーと作業領域を上下に並べます。 */
 .app-shell {
   min-height: 100vh;
   display: grid;
   grid-template-rows: 72px minmax(0, 1fr);
 }
 
+/* ヘッダー: ブランド、主要ボタン、依存設定を横並びで配置します。 */
 .topbar {
   display: grid;
   grid-template-columns: minmax(300px, 1fr) auto auto;
@@ -95,6 +99,7 @@ button {
   margin-top: 3px;
 }
 
+/* 主要操作ボタンと依存設定入力の共通スタイルです。 */
 .toolbar,
 .dependency-toolbar {
   display: flex;
@@ -164,6 +169,7 @@ button {
   width: 210px;
 }
 
+/* メイン作業領域: 左サイドバー、中央ステージ、右詳細ペインの3カラムです。 */
 .workspace {
   min-height: 0;
   display: grid;
@@ -187,6 +193,7 @@ button {
   overflow: auto;
 }
 
+/* 左サイドバー: 概要、フィルター、注視項目のカード群です。 */
 .project-panel,
 .filter-panel,
 .risk-panel,
@@ -305,6 +312,7 @@ button {
   line-height: 1.35;
 }
 
+/* 中央ステージ: 表示切替、検索、ステータス、各ビューの共通枠です。 */
 .stage {
   min-width: 0;
   display: grid;
@@ -370,6 +378,7 @@ button {
   background: #fff0ef;
 }
 
+/* ネットワーク/ガント/表ビューを重ね、選択中ビューだけ表示します。 */
 .view-stack {
   min-height: 0;
   position: relative;
@@ -386,6 +395,7 @@ button {
   display: block;
 }
 
+/* ネットワークビュー: SVG依存線とHTMLノードを同じキャンバス上に重ねます。 */
 #networkView {
   overflow: auto;
   background: #eef1ec;
@@ -529,6 +539,7 @@ button {
   background: linear-gradient(90deg, var(--teal), var(--green));
 }
 
+/* ガントビュー: タスク名列と時間軸を横並びで表示します。 */
 .gantt-scroller,
 .table-wrap {
   height: 100%;
@@ -646,6 +657,7 @@ button {
   background: rgba(255, 255, 255, 0.32);
 }
 
+/* 表ビュー: タスク属性を一覧編集するためのテーブルです。 */
 .task-table {
   width: 100%;
   min-width: 1080px;
@@ -722,6 +734,7 @@ button {
   color: var(--red);
 }
 
+/* 詳細ペイン: 選択タスクと依存情報を編集します。 */
 .empty-inspector {
   padding: 16px;
 }
@@ -859,6 +872,7 @@ button {
   display: none !important;
 }
 
+/* 中幅画面: 左右ペインを少し細くして、中央の作業領域を確保します。 */
 @media (max-width: 1200px) {
   .workspace {
     grid-template-columns: 220px minmax(520px, 1fr) 292px;
@@ -869,6 +883,7 @@ button {
   }
 }
 
+/* 狭幅画面: 3カラムを縦積みにして操作できるようにします。 */
 @media (max-width: 980px) {
   .app-shell {
     grid-template-rows: auto minmax(0, 1fr);

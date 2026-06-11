@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="./styles.css?v=7">
   </head>
   <body>
+    <!-- 画面上部: ブランド名、主要操作、依存接続時の入力設定をまとめるヘッダーです。 -->
     <header class="topbar">
       <div class="brand">
         <div class="brand-mark">ER</div>
@@ -16,6 +17,7 @@
         </div>
       </div>
 
+      <!-- 主要操作: タスク追加、依存接続、自動整列、初期化を実行します。 -->
       <div class="actions">
         <button id="addTask" class="action-button" title="タスクを追加" aria-label="タスクを追加">
           <span class="action-icon">+</span>
@@ -35,6 +37,7 @@
         </button>
       </div>
 
+      <!-- 依存接続モード中だけ表示する、依存種別、ラグ、線ラベルの設定です。 -->
       <div class="link-settings" id="linkSettings">
         <label>依存種別
           <select id="relationType">
@@ -53,7 +56,9 @@
       </div>
     </header>
 
+    <!-- 画面本体: 左の集計/フィルター、中央の作業ビュー、右の詳細編集で構成します。 -->
     <main class="layout">
+      <!-- 左サイドバー: 工程概要、領域フィルター、注目タスクを表示します。 -->
       <aside class="sidebar">
         <section>
           <div class="eyebrow">概要</div>
@@ -72,6 +77,7 @@
         </section>
       </aside>
 
+      <!-- 中央ステージ: ネットワーク、ガント、表をタブで切り替える主作業領域です。 -->
       <section class="stage">
         <div class="stage-head">
           <div class="tabs">
@@ -84,6 +90,7 @@
 
         <div class="status" id="status">Ready</div>
 
+        <!-- ネットワークビュー: タスクノードと依存線を直接操作します。 -->
         <section class="view active" id="networkView">
           <div class="network-toolbar">
             <button id="focusSelected" class="network-tool-button" type="button" title="選択中のタスクへ移動" aria-label="選択中のタスクへ移動">
@@ -102,10 +109,12 @@
           </div>
         </section>
 
+        <!-- ガントビュー: 計算された最早開始日と期間を横棒で確認します。 -->
         <section class="view" id="ganttView">
           <div id="gantt" class="gantt"></div>
         </section>
 
+        <!-- 表ビュー: タスク属性を一覧で編集します。 -->
         <section class="view" id="tableView">
           <div class="table-wrap">
             <table>
@@ -129,6 +138,7 @@
         </section>
       </section>
 
+      <!-- 右ペイン: 選択タスクと接続依存線の詳細を編集します。 -->
       <aside class="inspector" id="inspector"></aside>
     </main>
 

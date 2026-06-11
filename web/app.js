@@ -1,8 +1,11 @@
+// ブラウザ保存キー、描画サイズ、工程計算で使う基本定数をまとめています。
 const STORAGE_KEY = "e-relations-gui-v1";
 const NODE_SIZES = {
   standard: { width: 196, height: 132, rowGap: 34 },
   compact: { width: 168, height: 96, rowGap: 24 }
 };
+
+// ネットワークビューの最小サイズと、自動整列時の余白/列間隔です。
 const NETWORK_MIN_W = 1350;
 const NETWORK_MIN_H = 820;
 const LAYOUT_MARGIN_X = 48;
@@ -10,6 +13,8 @@ const LAYOUT_MARGIN_Y = 54;
 const LAYOUT_COL_W = 245;
 const LAYOUT_AREA_GAP = 68;
 const DAY_W = 18;
+
+// EPCでよく使う領域、表示色、依存種別、ステータス、レベルのマスターです。
 const DEFAULT_AREAS = ["Engineering", "Procurement", "Fabrication", "Construction", "Commissioning"];
 const AREA_COLORS = ["#1a73e8", "#188038", "#f29900", "#9334e6", "#d93025", "#00796b", "#5f6368"];
 const RELATIONS = ["FS", "SS", "FF", "SF"];
@@ -25,7 +30,7 @@ const LEVELS = [
   ["lv4", "Lv4"]
 ];
 
-// UI state is kept in memory, mirrored to localStorage, and optionally saved through the local API.
+// 画面状態はメモリで持ち、localStorageとローカルAPIにも保存します。
 let state = loadState();
 let schedule = null;
 let drag = null;
@@ -33,10 +38,11 @@ let skipClick = false;
 let remoteSaveTimer = null;
 let networkBounds = { width: NETWORK_MIN_W, height: NETWORK_MIN_H };
 
+// DOM参照を短く書くためのヘルパーと、初期化後に埋める要素キャッシュです。
 const $ = (selector) => document.querySelector(selector);
 const els = {};
 
-// Bootstrap the page after the DOM exists, then load any server-side saved demo plan.
+// DOM生成後に画面を初期化し、ローカルAPIに保存済みのデモ工程があれば読み込みます。
 document.addEventListener("DOMContentLoaded", async () => {
   Object.assign(els, {
     metrics: $("#metrics"),
@@ -69,49 +75,49 @@ document.addEventListener("DOMContentLoaded", async () => {
   render();
 });
 
-// Wire all UI controls. Most handlers update state, persist it, and re-render.
+// すべての操作イベントを登録します。多くの処理は状態更新、保存、再描画の順で動きます。
 function bindEvents() {
   els.addTask.addEventListener("click", addTask);
   els.linkMode.addEventListener("click", () => {
-    // Link mode makes node clicks create dependencies instead of simply selecting tasks.
+    // 依存接続モードでは、ノードクリックを「選択」ではなく「依存線作成」に使います。
     state.linkMode = !state.linkMode;
     if (!state.linkMode) state.linkSource = null;
     saveState();
     render();
   });
   els.autoLayout.addEventListener("click", () => {
-    // Auto-layout keeps the current schedule but recalculates node positions.
+    // 自動整列は工程データを変えず、ノードの表示位置だけを再計算します。
     autoLayout();
     saveState();
     render();
     setStatus("重なりを避けて自動整列しました");
   });
   els.resetData.addEventListener("click", () => {
-    // Reset returns the browser to the built-in sample EPC plan.
+    // 初期化では、ブラウザ上の編集内容を内蔵サンプル工程へ戻します。
     if (!window.confirm("サンプル工程に戻します。現在の編集内容は置き換わります。")) return;
     state = seedState();
     saveState();
     render();
   });
   els.search.addEventListener("input", () => {
-    // Search is applied across code, name, owner, and area.
+    // 検索はコード、タスク名、担当、領域をまとめて対象にします。
     state.search = els.search.value.trim();
     saveState();
     render();
   });
   els.relationType.addEventListener("change", () => {
-    // Relation type is used by the next dependency created in link mode.
+    // 依存種別は、次に接続モードで作る依存線へ適用します。
     state.relationType = els.relationType.value;
     saveState();
   });
   els.lagDays.addEventListener("change", () => {
-    // Clamp lag so accidental large values do not distort the demo schedule.
+    // ラグは範囲内に丸め、誤入力で工程全体が大きく崩れないようにします。
     state.lagDays = clamp(parseInt(els.lagDays.value, 10), -30, 90, 0);
     els.lagDays.value = state.lagDays;
     saveState();
   });
   const syncEdgeLabel = () => {
-    // The label is applied to the next dependency created or updated in link mode.
+    // 線ラベルは、次に作成または更新する依存線へ適用します。
     state.edgeLabel = els.edgeLabel.value.trim().slice(0, 30);
     els.edgeLabel.value = state.edgeLabel;
     saveState();
@@ -130,7 +136,7 @@ function bindEvents() {
 
   document.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => {
-      // The active view is persisted so refreshes keep the same working surface.
+      // 表示中のビューは保存し、再読み込み後も同じ作業面から再開できるようにします。
       state.view = tab.dataset.view;
       saveState();
       render();
@@ -138,7 +144,7 @@ function bindEvents() {
   });
 
   els.filters.addEventListener("click", (event) => {
-    // Area filters narrow all views to the selected EPC work area.
+    // 領域フィルターは、ネットワーク、ガント、表すべての表示対象を絞り込みます。
     const addButton = event.target.closest("[data-add-area]");
     if (addButton) {
       addArea();
@@ -175,7 +181,7 @@ function bindEvents() {
   els.nodes.addEventListener("pointerdown", startDrag);
   els.edges.addEventListener("click", onEdgeClick);
   els.nodes.addEventListener("click", (event) => {
-    // Dragging a node also emits a click, so skipClick suppresses that accidental selection.
+    // ドラッグ後にもclickが発火するため、意図しない選択変更をskipClickで抑止します。
     if (skipClick) return;
     const node = event.target.closest(".node");
     if (!node) return;
@@ -184,7 +190,7 @@ function bindEvents() {
 
   els.taskTable.addEventListener("change", onTableChange);
   els.taskTable.addEventListener("click", (event) => {
-    // Selecting a table row should not interrupt native input/select interactions.
+    // 表の入力欄やセレクト操作中は、行選択が編集操作を邪魔しないようにします。
     const row = event.target.closest("[data-id]");
     if (!row) return;
     if (event.target.closest("input, select, textarea, button")) {
@@ -202,24 +208,24 @@ function bindEvents() {
   els.inspector.addEventListener("click", onInspectorClick);
 }
 
-// Load the last browser-local state. Broken JSON falls back to the sample data.
+// ブラウザに保存された直近状態を読み込みます。壊れたJSONならサンプルへ戻します。
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return normalizeState(JSON.parse(raw));
   } catch {
-    // Ignore broken localStorage state.
+    // 壊れたlocalStorageは無視して、初期データで続行します。
   }
   return seedState();
 }
 
-// Persist locally immediately and debounce the API save for local server mode.
+// localStorageへ即時保存し、ローカルAPIへの保存は短時間まとめて実行します。
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   scheduleRemoteSave();
 }
 
-// Load the shared demo plan from the local API when the dev server is running.
+// 開発サーバーが動いている場合は、共有デモ工程をローカルAPIから読み込みます。
 async function loadRemotePlan() {
   try {
     const res = await fetch("/api/plans/demo");
@@ -235,11 +241,11 @@ async function loadRemotePlan() {
       });
     }
   } catch {
-    // Local static file mode can still run without the API server.
+    // 静的ファイルとして開いた場合も、APIなしで画面だけは使えるようにします。
   }
 }
 
-// Debounced write-through save. Static hosting still works because API failures are ignored.
+// API保存は連続入力をまとめて送ります。静的ホスティングでは失敗しても無視します。
 function scheduleRemoteSave() {
   clearTimeout(remoteSaveTimer);
   remoteSaveTimer = setTimeout(() => {
@@ -248,12 +254,12 @@ function scheduleRemoteSave() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ plan: state })
     }).catch(() => {
-      // Keep the UI usable even if the local API is not running.
+      // ローカルAPIが止まっていても、画面操作自体は続けられるようにします。
     });
   }, 250);
 }
 
-// Built-in EPC sample used for first load, reset, and GitHub Pages static demo mode.
+// 初回表示、初期化、GitHub Pagesの静的デモで使う内蔵EPC工程サンプルです。
 function seedState() {
   return {
     view: "network",
@@ -307,17 +313,17 @@ function seedState() {
   };
 }
 
-// Task factory keeps seed data compact and consistent.
+// サンプルタスクを短く書きつつ、必須項目を正規化するための生成関数です。
 function task(id, code, name, area, owner, duration, x, y) {
   return normalizeTask({ id, code, name, area, owner, duration, progress: 0, x, y });
 }
 
-// Dependency factory supports FS/SS/FF/SF plus lag days.
+// 依存線の生成関数です。FS/SS/FF/SFとラグ日数を扱います。
 function dep(id, from, to, type, lag, label = "") {
   return normalizeDependency({ id, from, to, type, lag, label });
 }
 
-// Main render pipeline: recalculate schedule, sync controls, then repaint every view.
+// メイン描画処理です。工程計算、操作部品の同期、各ビュー再描画を順に行います。
 function render() {
   schedule = calculateSchedule(state.tasks, state.dependencies);
   els.search.value = state.search || "";
@@ -364,7 +370,7 @@ function render() {
   }
 }
 
-// Render summary cards for project duration, task count, dependency count, and critical count.
+// 工期、タスク数、依存線数、クリティカル数などの概要カードを描画します。
 function renderMetrics() {
   const criticalCount = [...schedule.items.values()].filter((item) => item.critical).length;
   const delayCount = state.tasks.filter((taskItem) => computeTaskStatus(taskItem).severity === "late").length;
@@ -381,7 +387,7 @@ function renderMetrics() {
     .join("");
 }
 
-// Render area filter buttons and their task counts.
+// 領域フィルターと、各領域に含まれるタスク数を描画します。
 function renderFilters() {
   const areas = getAreas();
   const buttons = [
@@ -421,7 +427,7 @@ function renderFilters() {
   `;
 }
 
-// Render short list of tasks that need attention because they are critical or low-float.
+// クリティカル、余裕日数が少ない、または遅延している注目タスクを描画します。
 function renderFocus() {
   const items = state.tasks
     .map((taskItem) => ({ task: taskItem, data: schedule.items.get(taskItem.id) }))
@@ -448,7 +454,7 @@ function renderFocus() {
   });
 }
 
-// Render the dependency network nodes and their SVG edges.
+// 依存ネットワークのタスクノードとSVG依存線を描画します。
 function renderNetwork() {
   const visible = visibleTasks();
   const visibleIds = new Set(visible.map((taskItem) => taskItem.id));
@@ -489,7 +495,7 @@ function renderNetwork() {
     .join("");
 }
 
-// Draw dependency edges with spread ports so multiple links do not fully overlap.
+// 複数の依存線が重なりすぎないよう、接続位置を少しずらして描画します。
 function renderEdges(visibleIds, bounds = networkBounds) {
   const map = new Map(state.tasks.map((taskItem) => [taskItem.id, taskItem]));
   const size = nodeSize();
@@ -511,7 +517,7 @@ function renderEdges(visibleIds, bounds = networkBounds) {
 
   const paths = visibleDeps
     .map((item, index) => {
-      // Route from the right side for forward links and the left side for backward links.
+      // 右方向の依存は右端から、戻り方向の依存は左端から線を出します。
       const from = map.get(item.from);
       const to = map.get(item.to);
       const fromData = schedule.items.get(item.from);
@@ -525,7 +531,7 @@ function renderEdges(visibleIds, bounds = networkBounds) {
       const direction = forward ? 1 : -1;
       const routeOffset = ((index % 7) - 3) * 18;
       const distanceX = Math.abs(x2 - x1);
-      // Reduce bend on short edges; otherwise adjacent nodes can produce noisy loops.
+      // 短い依存線では曲げを弱め、隣接ノード間の線が大きく暴れないようにします。
       const bend = routeOffset * Math.min(1, distanceX / 220);
       const dx = Math.max(28, Math.min(110, distanceX * 0.42));
       const c1x = x1 + direction * dx;
@@ -552,7 +558,7 @@ function renderEdges(visibleIds, bounds = networkBounds) {
   els.edges.innerHTML = defs + paths;
 }
 
-// Render horizontal area bands behind nodes so the expanded layout remains readable.
+// ノード背面に領域別の帯を描き、広いネットワークでも所属を追いやすくします。
 function renderAreaBands(tasks, bounds) {
   const size = nodeSize();
   const groups = new Map();
@@ -576,7 +582,7 @@ function renderAreaBands(tasks, bounds) {
     .join("");
 }
 
-// Scroll the network canvas so the selected task is centered and easy to spot.
+// 選択中タスクが見つけやすいように、ネットワーク表示をその位置へスクロールします。
 function focusSelectedTask(options = {}) {
   const selected = getTask(state.selected);
   const node = findNodeElement(state.selected);
@@ -601,7 +607,7 @@ function focusSelectedTask(options = {}) {
   }
 }
 
-// Compute vertical offsets for each edge endpoint so fan-in/fan-out links are distinguishable.
+// 入出力が多いノードでも線を見分けやすいよう、依存線の端点を上下に分散します。
 function buildEdgePortMeta(dependencies) {
   const outgoing = new Map();
   const incoming = new Map();
@@ -615,7 +621,7 @@ function buildEdgePortMeta(dependencies) {
 
   const meta = new Map();
   outgoing.forEach((items) => {
-    // Outgoing ports are ordered by target vertical position.
+    // 出力側の接続位置は、接続先タスクの縦位置順に並べます。
     const sorted = items.slice().sort((a, b) => {
       const aTarget = getTask(a.to);
       const bTarget = getTask(b.to);
@@ -628,7 +634,7 @@ function buildEdgePortMeta(dependencies) {
   });
 
   incoming.forEach((items) => {
-    // Incoming ports are ordered by source vertical position.
+    // 入力側の接続位置は、接続元タスクの縦位置順に並べます。
     const sorted = items.slice().sort((a, b) => {
       const aSource = getTask(a.from);
       const bSource = getTask(b.from);
@@ -651,7 +657,7 @@ function buildEdgePortMeta(dependencies) {
   return meta;
 }
 
-// Render a simple calculated Gantt chart from earliest start and task duration.
+// 最早開始日と期間から、簡易ガントチャートを描画します。
 function renderGantt() {
   const tasks = visibleTasks().slice().sort((a, b) => schedule.items.get(a.id).es - schedule.items.get(b.id).es);
   const days = Math.max(42, schedule.duration + 14);
@@ -687,7 +693,7 @@ function renderGantt() {
   `;
 }
 
-// Render editable table rows. Change events update the same task state used by all views.
+// 編集可能な表を描画します。変更内容は他ビューと同じタスク状態へ反映します。
 function renderTable() {
   els.taskTable.innerHTML = visibleTasks()
     .map((taskItem) => {
@@ -710,7 +716,7 @@ function renderTable() {
     .join("");
 }
 
-// Render the detail editor for the currently selected task.
+// 選択中タスクの詳細編集パネルを描画します。
 function renderInspector() {
   const selected = getTask(state.selected);
   if (!selected) {
@@ -774,7 +780,7 @@ function renderInspector() {
   `;
 }
 
-// Handle a network node click: select normally, or create/update a dependency in link mode.
+// ネットワークノードのクリック処理です。通常は選択、接続モードでは依存線を作成/更新します。
 function onNodeClick(id) {
   if (!state.linkMode) {
     state.selected = id;
@@ -800,7 +806,7 @@ function onNodeClick(id) {
   ];
 
   if (!existing && hasCycle(state.tasks, nextDeps)) {
-    // Reject cycles immediately so the schedule calculation remains a DAG.
+    // 循環依存はすぐに拒否し、工程計算に必要なDAG構造を守ります。
     setStatus("循環依存になるため接続できません", "error");
     return;
   }
@@ -821,7 +827,7 @@ function onNodeClick(id) {
   requestAnimationFrame(() => focusDependencyRow(state.selectedDependency));
 }
 
-// Clicking a dependency line selects that relation and exposes its editor row.
+// 依存線をクリックしたら、その依存を選択して右ペインの編集行を表示します。
 function onEdgeClick(event) {
   const group = event.target.closest("[data-dependency-id]");
   if (!group) return;
@@ -841,7 +847,7 @@ function onEdgeClick(event) {
   setStatus(`依存線を選択: ${from?.code || item.from} → ${to?.code || item.to}`);
 }
 
-// Start dragging a task node in the network view.
+// ネットワーク上でタスクノードのドラッグを開始します。
 function startDrag(event) {
   const node = event.target.closest(".node");
   if (!node || state.linkMode) return;
@@ -860,7 +866,7 @@ function startDrag(event) {
   document.addEventListener("pointerup", endDrag, { once: true });
 }
 
-// Move the dragged node and redraw only the SVG edges for responsive feedback.
+// ドラッグ中はノード位置を更新し、反応を軽くするため依存線だけを再描画します。
 function moveDrag(event) {
   if (!drag) return;
   const taskItem = getTask(drag.id);
@@ -875,7 +881,7 @@ function moveDrag(event) {
   renderEdges(new Set(visibleTasks().map((task) => task.id)), networkBounds);
 }
 
-// Finish node dragging, persist the new position, and suppress the following synthetic click.
+// ドラッグ終了時に位置を保存し、直後に発生する不要なclickを抑止します。
 function endDrag() {
   if (drag?.moved) {
     skipClick = true;
@@ -888,14 +894,14 @@ function endDrag() {
   drag = null;
 }
 
-// Apply changes made in the table view.
+// 表ビューで編集された値をタスク状態へ反映します。
 function onTableChange(event) {
   const row = event.target.closest("[data-id]");
   if (!row || !event.target.dataset.field) return;
   updateTask(row.dataset.id, event.target.dataset.field, event.target.value);
 }
 
-// Apply changes made in the inspector panel.
+// 右ペインで編集されたタスクまたは依存線の値を反映します。
 function onInspectorChange(event) {
   const depField = event.target.dataset.dependencyField;
   if (depField) {
@@ -908,7 +914,7 @@ function onInspectorChange(event) {
   updateTask(state.selected, field, event.target.value);
 }
 
-// Save free-form notes while typing without re-rendering and stealing the cursor.
+// メモ入力中は再描画でカーソルを奪わないよう、値だけ保存します。
 function onInspectorInput(event) {
   if (event.target.dataset.inspector !== "description") return;
   const taskItem = getTask(state.selected);
@@ -917,7 +923,7 @@ function onInspectorInput(event) {
   saveState();
 }
 
-// Handle dependency deletion from the selected task detail panel.
+// 詳細パネル上の依存線削除やタスク削除ボタンを処理します。
 function onInspectorClick(event) {
   const deleteTaskButton = event.target.closest("[data-delete-task]");
   if (deleteTaskButton) {
@@ -933,7 +939,7 @@ function onInspectorClick(event) {
   render();
 }
 
-// Update a single task field and re-render all dependent views.
+// タスクの1項目を更新し、関係するビューを再描画します。
 function updateTask(id, field, value) {
   const taskItem = getTask(id);
   if (!taskItem) return;
@@ -951,7 +957,7 @@ function updateTask(id, field, value) {
   render();
 }
 
-// Update one dependency from the detail panel without changing its endpoints.
+// 依存線の接続元/接続先は変えず、種別、ラグ、ラベルだけを更新します。
 function updateDependency(id, field, value) {
   const item = state.dependencies.find((depItem) => depItem.id === id);
   if (!item) return;
@@ -963,7 +969,7 @@ function updateDependency(id, field, value) {
   render();
 }
 
-// Delete a task and its connected dependencies after an explicit confirmation.
+// 確認後にタスクを削除し、そのタスクに接続する依存線もまとめて削除します。
 function deleteTask(id) {
   const taskItem = getTask(id);
   if (!taskItem) return;
@@ -983,7 +989,7 @@ function deleteTask(id) {
   setStatus("タスクを削除しました");
 }
 
-// Add a new task in the current area filter, then select it for editing.
+// 現在の領域フィルターに合わせて新規タスクを作り、すぐ編集できるよう選択します。
 function addTask() {
   const id = `t${Date.now()}`;
   const taskItem = task(id, `N${state.tasks.length + 1}`, "新規タスク", state.area === "all" ? getAreas()[0] : state.area, "", 5, 80, 120);
@@ -994,7 +1000,7 @@ function addTask() {
   render();
 }
 
-// Place tasks by dependency generation and stack same-column tasks to avoid overlap.
+// 依存の世代ごとに横配置し、同じ列のタスクは縦に積んで重なりを避けます。
 function autoLayout() {
   const areas = getAreas();
   const generations = computeDependencyGenerations();
@@ -1032,7 +1038,7 @@ function autoLayout() {
   });
 }
 
-// Compute a stable left-to-right generation for dependencies so successors move right.
+// 後続タスクが右へ進むよう、依存関係から安定した世代番号を計算します。
 function computeDependencyGenerations() {
   const ids = new Set(state.tasks.map((taskItem) => taskItem.id));
   const outgoing = new Map(state.tasks.map((taskItem) => [taskItem.id, []]));
@@ -1062,7 +1068,7 @@ function computeDependencyGenerations() {
   return generations;
 }
 
-// Size the network canvas around visible nodes so auto-layout can expand naturally.
+// 表示中ノードを収めるようにネットワークキャンバスの大きさを調整します。
 function calculateNetworkBounds(tasks) {
   const size = nodeSize();
   if (!tasks.length) return { width: NETWORK_MIN_W, height: NETWORK_MIN_H };
@@ -1074,7 +1080,7 @@ function calculateNetworkBounds(tasks) {
   };
 }
 
-// Calculate CPM-style earliest/latest dates, total duration, float, and critical flags.
+// CPM風に最早/最遅日、総工期、余裕日数、クリティカル判定を計算します。
 function calculateSchedule(tasks, dependencies) {
   const map = new Map(tasks.map((taskItem) => [taskItem.id, taskItem]));
   const items = new Map(tasks.map((taskItem) => [taskItem.id, { es: 0, ef: taskItem.duration, ls: 0, lf: 0, float: 0, critical: false }]));
@@ -1082,7 +1088,7 @@ function calculateSchedule(tasks, dependencies) {
   const indegree = new Map(tasks.map((taskItem) => [taskItem.id, 0]));
 
   for (const item of dependencies) {
-    // Build adjacency and indegree for topological traversal.
+    // トポロジカル順にたどるため、隣接リストと入次数を作ります。
     if (!map.has(item.from) || !map.has(item.to)) continue;
     outgoing.get(item.from).push(item);
     indegree.set(item.to, indegree.get(item.to) + 1);
@@ -1091,7 +1097,7 @@ function calculateSchedule(tasks, dependencies) {
   const queue = tasks.filter((taskItem) => indegree.get(taskItem.id) === 0).map((taskItem) => taskItem.id);
   const topo = [];
   while (queue.length) {
-    // Kahn topological sort gives safe forward/backward schedule order.
+    // Kahn法のトポロジカルソートで、前進/後退計算に使える安全な順序を作ります。
     const id = queue.shift();
     topo.push(id);
     for (const item of outgoing.get(id)) {
@@ -1101,7 +1107,7 @@ function calculateSchedule(tasks, dependencies) {
   }
 
   for (const id of topo) {
-    // Forward pass: earliest start is constrained by predecessor relation offsets.
+    // 前進計算では、先行依存のオフセットから最早開始日を押し出します。
     const from = map.get(id);
     const fromItem = items.get(id);
     fromItem.ef = fromItem.es + from.duration;
@@ -1113,7 +1119,7 @@ function calculateSchedule(tasks, dependencies) {
   }
 
   for (const taskItem of tasks) {
-    // Normalize earliest finish after all starts are known.
+    // すべての最早開始日が決まった後、最早終了日を正規化します。
     const item = items.get(taskItem.id);
     item.ef = item.es + taskItem.duration;
   }
@@ -1121,14 +1127,14 @@ function calculateSchedule(tasks, dependencies) {
   const duration = Math.max(0, ...[...items.values()].map((item) => item.ef));
 
   for (const taskItem of tasks) {
-    // Initialize backward pass from project finish.
+    // 後退計算はプロジェクト終了日を基準に初期化します。
     const item = items.get(taskItem.id);
     item.ls = duration - taskItem.duration;
     item.lf = duration;
   }
 
   for (const id of topo.slice().reverse()) {
-    // Backward pass: latest start is constrained by successor latest starts.
+    // 後退計算では、後続タスクの最遅開始日から最遅開始日を引き戻します。
     const from = map.get(id);
     const fromItem = items.get(id);
     for (const item of outgoing.get(id)) {
@@ -1144,7 +1150,7 @@ function calculateSchedule(tasks, dependencies) {
   return { items, duration };
 }
 
-// Convert FS/SS/FF/SF dependency semantics into a start-to-start offset.
+// FS/SS/FF/SFの意味を、開始日同士のオフセットへ変換します。
 function dependencyOffset(item, from, to) {
   const lag = Number(item.lag) || 0;
   if (item.type === "SS") return lag;
@@ -1153,13 +1159,13 @@ function dependencyOffset(item, from, to) {
   return from.duration + lag;
 }
 
-// Detect cycles before accepting new dependencies.
+// 新しい依存線を受け入れる前に、循環依存ができないか検出します。
 function hasCycle(tasks, dependencies) {
   const ids = new Set(tasks.map((taskItem) => taskItem.id));
   const outgoing = new Map(tasks.map((taskItem) => [taskItem.id, []]));
   const indegree = new Map(tasks.map((taskItem) => [taskItem.id, 0]));
   dependencies.forEach((item) => {
-    // Ignore orphan dependencies defensively.
+    // 存在しないタスクを指す依存線は、防御的に無視します。
     if (!ids.has(item.from) || !ids.has(item.to)) return;
     outgoing.get(item.from).push(item.to);
     indegree.set(item.to, indegree.get(item.to) + 1);
@@ -1167,7 +1173,7 @@ function hasCycle(tasks, dependencies) {
   const queue = tasks.filter((taskItem) => indegree.get(taskItem.id) === 0).map((taskItem) => taskItem.id);
   let visited = 0;
   while (queue.length) {
-    // If every task cannot be visited, a cycle remains.
+    // すべてのタスクを訪問できなければ、循環依存が残っています。
     const id = queue.shift();
     visited += 1;
     outgoing.get(id).forEach((to) => {
@@ -1178,7 +1184,7 @@ function hasCycle(tasks, dependencies) {
   return visited !== tasks.length;
 }
 
-// Apply current area and text filters.
+// 現在の領域、クリティカル、検索文字列フィルターを適用します。
 function visibleTasks() {
   const q = (state.search || "").toLowerCase();
   return state.tasks.filter((taskItem) => {
@@ -1189,7 +1195,7 @@ function visibleTasks() {
   });
 }
 
-// Keep the detail panel aligned with the current filters.
+// フィルター変更後も、詳細パネルが表示中タスクを指すように補正します。
 function ensureSelectedVisible() {
   const visible = visibleTasks();
   if (!visible.length) {
@@ -1201,7 +1207,7 @@ function ensureSelectedVisible() {
   }
 }
 
-// Return predecessor summaries for table display.
+// 表ビューに表示する先行タスクの短い説明を返します。
 function predecessorSummaries(id) {
   return state.dependencies
     .filter((item) => item.to === id)
@@ -1212,12 +1218,12 @@ function predecessorSummaries(id) {
     .filter(Boolean);
 }
 
-// Find a task by id.
+// タスクIDからタスクを探します。
 function getTask(id) {
   return state.tasks.find((taskItem) => taskItem.id === id);
 }
 
-// Normalize loaded data so older localStorage/JSON plans keep working after schema additions.
+// 古いlocalStorageやJSONでも、新しい項目を補完して動くように正規化します。
 function normalizeState(raw) {
   if (!raw || !Array.isArray(raw.tasks) || !Array.isArray(raw.dependencies)) return seedState();
   const tasks = raw.tasks.map(normalizeTask);
@@ -1246,7 +1252,7 @@ function normalizeState(raw) {
   };
 }
 
-// Fill missing task fields introduced after the original MVP.
+// 初期MVP後に追加したタスク項目を補完します。
 function normalizeTask(raw) {
   const area = String(raw.area || DEFAULT_AREAS[0]).trim() || DEFAULT_AREAS[0];
   return {
@@ -1269,7 +1275,7 @@ function normalizeTask(raw) {
   };
 }
 
-// Fill missing dependency fields introduced after the original MVP.
+// 初期MVP後に追加した依存線項目を補完します。
 function normalizeDependency(raw) {
   return {
     id: String(raw.id || `d${Date.now()}`),
@@ -1281,7 +1287,7 @@ function normalizeDependency(raw) {
   };
 }
 
-// Render dependency rows connected from the selected task.
+// 選択中タスクにつながる先行依存と後続依存の編集行を描画します。
 function renderDependencyEditor(taskId) {
   const incoming = state.dependencies.filter((item) => item.to === taskId);
   const outgoing = state.dependencies.filter((item) => item.from === taskId);
@@ -1295,7 +1301,7 @@ function renderDependencyEditor(taskId) {
   `;
 }
 
-// Render one dependency section for predecessor or successor links.
+// 先行依存または後続依存の1セクションを描画します。
 function renderDependencyGroup(title, items, peerField) {
   return `
     <div class="dependency-group">
@@ -1305,7 +1311,7 @@ function renderDependencyGroup(title, items, peerField) {
   `;
 }
 
-// Render one editable dependency row.
+// 編集可能な依存線1行を描画します。
 function renderDependencyRow(item, peerField) {
   const peer = getTask(item[peerField]);
   const arrow = peerField === "from" ? "←" : "→";
@@ -1339,7 +1345,7 @@ function focusDependencyRow(id) {
   row.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
-// Add a custom affiliation/area used by filters and task editors.
+// フィルターやタスク編集で使う任意の所属/領域を追加します。
 function addArea() {
   const input = els.filters.querySelector("[data-new-area]");
   const value = input?.value.trim().slice(0, 24);
@@ -1350,7 +1356,7 @@ function addArea() {
   render();
 }
 
-// Remove an unused custom affiliation/area.
+// 未使用の任意所属/領域を削除します。
 function deleteArea(area) {
   if (DEFAULT_AREAS.includes(area) || state.tasks.some((taskItem) => taskItem.area === area)) return;
   state.areas = state.areas.filter((item) => item !== area);
@@ -1359,25 +1365,25 @@ function deleteArea(area) {
   render();
 }
 
-// Return all known affiliations/areas in a stable display order.
+// 既知の所属/領域を、安定した表示順で返します。
 function getAreas() {
   return unique([...(state.areas || []), ...DEFAULT_AREAS, ...state.tasks.map((taskItem) => taskItem.area)]);
 }
 
-// Pick a consistent visual color for an affiliation/area.
+// 所属/領域ごとに一貫した表示色を選びます。
 function areaColor(area) {
   const areas = getAreas();
   const index = Math.max(0, areas.indexOf(area));
   return AREA_COLORS[index % AREA_COLORS.length];
 }
 
-// Build the compact edge label shown on SVG lines and predecessor cells.
+// SVG依存線と表の先行欄に出す短い依存ラベルを作ります。
 function dependencyLabel(item) {
   const lag = item.lag ? item.lag > 0 ? `+${item.lag}` : item.lag : "";
   return `${item.type}${lag}${item.label ? ` · ${item.label}` : ""}`;
 }
 
-// Compute display status, including simple planned/actual date delay flags.
+// 手動ステータスに加え、予定/実績日から簡易的な遅延表示を計算します。
 function computeTaskStatus(taskItem) {
   const today = todayText();
   if (taskItem.status === "done") return { key: "done", label: "完了", severity: "ok" };
@@ -1423,18 +1429,18 @@ function unique(items) {
   return [...new Set(items.map((item) => String(item || "").trim()).filter(Boolean))];
 }
 
-// Update the status bar text and severity class.
+// ステータスバーの文言と警告/エラー表示クラスを更新します。
 function setStatus(text, type = "") {
   els.status.textContent = text;
   els.status.className = `status ${type}`.trim();
 }
 
-// Clamp numeric input and use fallback for invalid values.
+// 数値入力を指定範囲に丸め、不正値ならフォールバック値を使います。
 function clamp(value, min, max, fallback) {
   return Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
 }
 
-// Escape text before injecting it into HTML templates.
+// HTMLテンプレートへ差し込む前に文字列をエスケープします。
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -1444,7 +1450,7 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
-// Attribute escaping is currently the same as HTML escaping.
+// 属性値のエスケープも、現時点ではHTML本文と同じ処理を使います。
 function escapeAttr(value) {
   return escapeHtml(value);
 }

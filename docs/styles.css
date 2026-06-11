@@ -1,3 +1,4 @@
+/* 全体テーマ: Google/Material寄りの淡い背景、白い面、意味色をここで管理します。 */
 :root {
   --bg: #f6f8fc;
   --panel: #ffffff;
@@ -13,6 +14,7 @@
   --shadow: 0 10px 24px rgba(60, 64, 67, 0.12);
 }
 
+/* 基本リセット: 余白や入力部品のフォント差を抑えて、画面全体を揃えます。 */
 * {
   box-sizing: border-box;
 }
@@ -36,6 +38,7 @@ button {
   cursor: pointer;
 }
 
+/* ヘッダー: ブランド、主要操作、依存接続設定を横並びで配置します。 */
 .topbar {
   min-height: 76px;
   display: grid;
@@ -76,6 +79,7 @@ button {
   font-size: 12px;
 }
 
+/* 主要操作ボタン: タスク追加、接続、自動整列、初期化の共通スタイルです。 */
 .actions {
   display: flex;
   align-items: center;
@@ -131,6 +135,7 @@ button {
   color: var(--red);
 }
 
+/* 依存接続設定: 接続モード中だけ表示される種別、ラグ、線ラベルの入力欄です。 */
 .link-settings {
   display: none;
   align-items: center;
@@ -174,6 +179,7 @@ button {
   width: 138px;
 }
 
+/* 全体レイアウト: 左サイドバー、中央ステージ、右詳細ペインの3カラムです。 */
 .layout {
   height: calc(100vh - 76px);
   min-height: 680px;
@@ -200,6 +206,7 @@ button {
   border-bottom: 1px solid var(--line);
 }
 
+/* 左サイドバー: 概要カード、領域フィルター、注目タスクの見た目です。 */
 .eyebrow {
   color: var(--muted);
   font-size: 11px;
@@ -257,6 +264,7 @@ button {
   gap: 8px;
 }
 
+/* フィルター/注目ボタン: 領域選択、クリティカル絞り込み、注目タスク一覧で共用します。 */
 .chip,
 .focus-item {
   min-height: 40px;
@@ -372,6 +380,7 @@ button {
   font-size: 12px;
 }
 
+/* 中央ステージ: ビュー切替タブ、検索、ステータスバー、各ビューの枠です。 */
 .stage {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -450,6 +459,7 @@ button {
   display: block;
 }
 
+/* ネットワークビュー: ツールバー、広いキャンバス、領域帯、依存線、ノードを重ねて表示します。 */
 #networkView {
   overflow: auto;
   background: #eef2f7;
@@ -572,6 +582,7 @@ button {
   font-weight: 800;
 }
 
+/* 依存線: SVGの線、クリック判定用の透明線、選択/クリティカル時の強調です。 */
 .edges {
   z-index: 1;
   width: 100%;
@@ -624,6 +635,7 @@ button {
   fill: #8a4b00;
 }
 
+/* タスクノード: ネットワーク上のカード表示、状態バッジ、進捗バーをまとめます。 */
 .node {
   position: absolute;
   width: var(--node-width);
@@ -753,6 +765,7 @@ button {
   background: var(--teal);
 }
 
+/* コンパクト表示: ノード内の情報量を減らし、広い工程を見渡しやすくします。 */
 .network.compact .node {
   padding: 9px;
 }
@@ -785,6 +798,7 @@ button {
   animation: focusPulse 900ms ease-out 1;
 }
 
+/* 選択タスクへ移動したとき、一瞬だけノードを光らせて位置を知らせます。 */
 @keyframes focusPulse {
   0% {
     box-shadow: 0 0 0 0 rgba(26, 115, 232, 0.45), 0 8px 18px rgba(60, 64, 67, 0.14);
@@ -795,6 +809,7 @@ button {
   }
 }
 
+/* ガント/表ビュー: 計算結果を横棒または編集可能な一覧で確認します。 */
 .gantt,
 .table-wrap {
   height: 100%;
@@ -924,6 +939,7 @@ tr.selected {
   background: #e8f0fe;
 }
 
+/* 右詳細ペイン: 選択タスクの属性と依存線編集行を配置します。 */
 .inspector h2 {
   margin: 8px 0 0;
   font-size: 18px;
@@ -1031,6 +1047,7 @@ tr.selected {
   font-weight: 800;
 }
 
+/* タブレット幅: 3カラムを縦並びにして、横幅不足でも編集できるようにします。 */
 @media (max-width: 1100px) {
   .topbar,
   .layout {
@@ -1060,6 +1077,7 @@ tr.selected {
   }
 }
 
+/* モバイル幅: ヘッダー操作と依存設定を2列中心にし、狭い画面で押しやすくします。 */
 @media (max-width: 700px) {
   .topbar {
     gap: 10px;

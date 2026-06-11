@@ -1,8 +1,13 @@
+// 旧アップロード用の静的コピーです。現在の本体は web/ と docs/ を参照してください。
+// このファイルは過去版の動作確認用として残しているため、主要ブロックだけ説明コメントを付けています。
+
+// ブラウザ保存キー、ノードサイズ、ガント幅など、この旧UI全体で使う基本定数です。
 const STORAGE_KEY = "epc-dependency-planner-v2";
 const NODE_W = 196;
 const NODE_H = 110;
 const DAY_WIDTH = 18;
 
+// EPC工程の初期マスターです。領域や職種の選択肢として使います。
 const AREAS = [
   "Engineering",
   "Procurement",
@@ -28,22 +33,26 @@ const RELATION_LABELS = {
   SF: "SF"
 };
 
+// 画面状態、計算結果、ドラッグ操作中の一時情報を保持します。
 let state = loadState();
 let schedule = null;
 let dragState = null;
 let ganttDragState = null;
 let ignoreNextClick = false;
 
+// 初期化時にDOM要素をまとめて格納し、以後の処理で再利用します。
 const els = {};
 
 document.addEventListener("DOMContentLoaded", init);
 
+// 初期化処理です。DOM参照、イベント登録、初回描画を順番に行います。
 function init() {
   cacheElements();
   bindEvents();
   renderAll();
 }
 
+// 画面内で頻繁に使うDOM要素をキャッシュします。
 function cacheElements() {
   els.metricGrid = document.getElementById("metricGrid");
   els.packageFilters = document.getElementById("packageFilters");
@@ -68,6 +77,7 @@ function cacheElements() {
   els.resetButton = document.getElementById("resetButton");
 }
 
+// ボタン、タブ、ドラッグ、インポートなどの操作イベントを登録します。
 function bindEvents() {
   els.addTaskButton.addEventListener("click", addTask);
   els.deleteTaskButton.addEventListener("click", deleteSelectedTask);
@@ -144,6 +154,7 @@ function bindEvents() {
   els.inspector.addEventListener("click", handleInspectorClick);
 }
 
+// ブラウザに保存された状態を読み込みます。なければサンプル工程を使います。
 function loadState() {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -156,10 +167,12 @@ function loadState() {
   return createSeedState();
 }
 
+// 編集状態をlocalStorageへ保存します。
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
+// 初回表示やリセット時に使うサンプル工程データを作ります。
 function createSeedState() {
   return {
     project: {
@@ -212,6 +225,7 @@ function createSeedState() {
   };
 }
 
+// タスクデータを作成し、旧版で必要な初期値を補完します。
 function task(id, code, name, area, discipline, owner, duration, constraint, progress, x, y) {
   return {
     id,
@@ -229,10 +243,12 @@ function task(id, code, name, area, discipline, owner, duration, constraint, pro
   };
 }
 
+// 依存線データを作成します。
 function dep(id, from, to, type, lag) {
   return { id, from, to, type, lag };
 }
 
+// 古い保存データでも動くように、不足項目や不正値を補正します。
 function normalizeState(input) {
   const seeded = createSeedState();
   const tasks = Array.isArray(input.tasks) ? input.tasks : seeded.tasks;
@@ -286,6 +302,7 @@ function normalizeState(input) {
   };
 }
 
+// 全ビューの再描画入口です。工程計算後に各領域を更新します。
 function renderAll() {
   schedule = calculateSchedule(state.tasks, state.dependencies);
   renderHeaderControls();
@@ -300,12 +317,14 @@ function renderAll() {
   updateToolbarState();
 }
 
+// ヘッダー内の接続モードや依存設定を現在状態に合わせます。
 function renderHeaderControls() {
   els.searchInput.value = state.search || "";
   els.relationType.value = state.linkRelation || "FS";
   els.lagDays.value = state.linkLag || 0;
 }
 
+// ネットワーク、ガント、表のタブ状態を更新します。
 function renderTabs() {
   document.querySelectorAll(".tab-button").forEach((button) => {
     const active = button.dataset.view === state.view;
@@ -318,6 +337,7 @@ function renderTabs() {
   });
 }
 
+// 工期、タスク数、依存線数、クリティカル数などの概要を描画します。
 function renderMetrics() {
   const metrics = [
     { value: `${Math.round(schedule.projectDuration)}日`, label: "計算工期" },
@@ -338,6 +358,7 @@ function renderMetrics() {
     .join("");
 }
 
+// 領域フィルターを描画します。
 function renderFilters() {
   const counts = new Map(AREAS.map((area) => [area, 0]));
   state.tasks.forEach((taskItem) => counts.set(taskItem.area, (counts.get(taskItem.area) || 0) + 1));
@@ -358,6 +379,7 @@ function renderFilters() {
     .join("");
 }
 
+// クリティカルや余裕日数が少ない注視タスクを描画します。
 function renderRisks() {
   const riskyTasks = state.tasks
     .map((taskItem) => ({ task: taskItem, data: schedule.tasks.get(taskItem.id) }))
@@ -391,6 +413,7 @@ function renderRisks() {
   });
 }
 
+// ネットワークビューのノードと依存線を描画します。
 function renderNetwork() {
   const visibleTasks = getVisibleTasks();
   const visibleIds = new Set(visibleTasks.map((taskItem) => taskItem.id));
@@ -418,6 +441,7 @@ function renderNetwork() {
   });
 }
 
+// SVGで依存線を描画します。
 function renderEdges(visibleIds = new Set(getVisibleTasks().map((taskItem) => taskItem.id))) {
   const taskById = getTaskMap();
   const width = els.networkCanvas.offsetWidth || 1380;
@@ -466,6 +490,7 @@ function renderEdges(visibleIds = new Set(getVisibleTasks().map((taskItem) => ta
   els.edgeLayer.innerHTML = defs + paths;
 }
 
+// CPM計算結果を使い、簡易ガントチャートを描画します。
 function renderGantt() {
   const visibleTasks = getVisibleTasks().sort((a, b) => {
     const aData = schedule.tasks.get(a.id);
@@ -518,6 +543,7 @@ function renderGantt() {
   `;
 }
 
+// 編集可能な工程表を描画します。
 function renderTable() {
   const visibleTasks = getVisibleTasks().sort((a, b) => a.code.localeCompare(b.code));
   els.taskTableBody.innerHTML = visibleTasks
@@ -546,6 +572,7 @@ function renderTable() {
     .join("");
 }
 
+// 選択中タスクの詳細編集パネルを描画します。
 function renderInspector() {
   const selected = getSelectedTask();
   if (!selected) {
@@ -643,6 +670,7 @@ function renderInspector() {
   `;
 }
 
+// 選択状態や接続モードに合わせてツールバー表示を更新します。
 function updateToolbarState() {
   const selected = getSelectedTask();
   els.deleteTaskButton.disabled = !selected;
@@ -660,17 +688,20 @@ function updateToolbarState() {
   }
 }
 
+// 表示ビューを切り替えます。
 function setView(view) {
   state.view = view;
   saveState();
   renderAll();
 }
 
+// 画面下部の状態メッセージを更新します。
 function setStatus(message, type = "") {
   els.statusBar.textContent = message;
   els.statusBar.className = `statusbar ${type}`.trim();
 }
 
+// 新規タスクを追加して選択状態にします。
 function addTask() {
   const index = state.tasks.length + 1;
   const area = state.activeArea !== "all" ? state.activeArea : "Engineering";
@@ -696,6 +727,7 @@ function addTask() {
   setStatus("タスクを追加しました");
 }
 
+// 選択中タスクを削除します。
 function deleteSelectedTask() {
   const selected = getSelectedTask();
   if (!selected) return;
@@ -710,6 +742,7 @@ function deleteSelectedTask() {
   setStatus("タスクを削除しました");
 }
 
+// 依存接続モードをON/OFFします。
 function toggleLinkMode() {
   state.linkMode = !state.linkMode;
   if (!state.linkMode) {
@@ -719,6 +752,7 @@ function toggleLinkMode() {
   renderAll();
 }
 
+// ネットワーク上のノードクリックを受け取り、タスク操作へ渡します。
 function handleNodeClick(event) {
   const node = event.target.closest(".task-node");
   if (!node) return;
@@ -726,6 +760,7 @@ function handleNodeClick(event) {
   handleNodeAction(node.dataset.id);
 }
 
+// 通常選択または依存接続のどちらかとしてノード操作を処理します。
 function handleNodeAction(id) {
   if (!id) return;
   if (!state.linkMode) {
@@ -754,6 +789,7 @@ function handleNodeAction(id) {
   renderAll();
 }
 
+// ネットワーク上のノードドラッグを開始します。
 function startNodeDrag(event) {
   const node = event.target.closest(".task-node");
   if (!node || state.linkMode) return;
@@ -775,6 +811,7 @@ function startNodeDrag(event) {
   document.addEventListener("pointerup", endNodeDrag, { once: true });
 }
 
+// ドラッグ中のノード位置を更新します。
 function moveNode(event) {
   if (!dragState) return;
   const dx = event.clientX - dragState.startX;
@@ -789,6 +826,7 @@ function moveNode(event) {
   renderEdges();
 }
 
+// ノードドラッグを終了し、位置を保存します。
 function endNodeDrag() {
   if (!dragState) return;
   dragState.node.classList.remove("dragging");
@@ -803,6 +841,7 @@ function endNodeDrag() {
   dragState = null;
 }
 
+// ガントバーのドラッグ編集を開始します。
 function startGanttDrag(event) {
   const bar = event.target.closest(".gantt-bar");
   if (!bar) return;
@@ -822,6 +861,7 @@ function startGanttDrag(event) {
   document.addEventListener("pointerup", endGanttDrag, { once: true });
 }
 
+// ガントバーのドラッグ中に期間を更新します。
 function moveGanttBar(event) {
   if (!ganttDragState) return;
   const dx = event.clientX - ganttDragState.startX;
@@ -830,6 +870,7 @@ function moveGanttBar(event) {
   ganttDragState.bar.style.left = `${day * DAY_WIDTH}px`;
 }
 
+// ガントバーのドラッグ終了時に編集内容を確定します。
 function endGanttDrag(event) {
   if (!ganttDragState) return;
   const taskItem = getTask(ganttDragState.id);
@@ -850,6 +891,7 @@ function endGanttDrag(event) {
   ganttDragState = null;
 }
 
+// 表ビューの編集内容をタスク状態へ反映します。
 function handleTableChange(event) {
   const target = event.target;
   const id = target.dataset.id;
@@ -862,6 +904,7 @@ function handleTableChange(event) {
   }
 }
 
+// 詳細パネルの入力変更をタスクまたは依存線へ反映します。
 function handleInspectorChange(event) {
   const target = event.target;
   if (target.dataset.inspectorField) {
@@ -887,6 +930,7 @@ function handleInspectorChange(event) {
   }
 }
 
+// 詳細パネル内の削除や追加ボタンを処理します。
 function handleInspectorClick(event) {
   const removeId = event.target.closest("[data-remove-dep]")?.dataset.removeDep;
   if (removeId) {
@@ -915,6 +959,7 @@ function handleInspectorClick(event) {
   }
 }
 
+// タスクの単一フィールドを型に合わせて更新します。
 function updateTaskField(id, field, rawValue) {
   const taskItem = getTask(id);
   if (!taskItem) return;
@@ -956,6 +1001,7 @@ function updateTaskField(id, field, rawValue) {
   renderAll();
 }
 
+// 表や詳細で入力された先行コード一覧から依存線を作り直します。
 function updatePredecessorsFromCodes(taskId, rawValue) {
   const target = getTask(taskId);
   if (!target) return;
@@ -1000,6 +1046,7 @@ function updatePredecessorsFromCodes(taskId, rawValue) {
   setStatus("先行タスクを更新しました");
 }
 
+// 循環依存を避けながら依存線を追加します。
 function addDependency(fromId, toId, type = "FS", lag = 0) {
   if (!fromId || !toId || fromId === toId) {
     setStatus("自分自身には接続できません", "error");
@@ -1027,6 +1074,7 @@ function addDependency(fromId, toId, type = "FS", lag = 0) {
   return true;
 }
 
+// 依存関係に沿って左から右へ並ぶように自動整列します。
 function autoLayout() {
   const calculated = calculateSchedule(state.tasks, state.dependencies);
   const lanes = new Map();
@@ -1047,6 +1095,7 @@ function autoLayout() {
   });
 }
 
+// 内蔵サンプル工程へ戻します。
 function resetSample() {
   const confirmed = window.confirm("サンプル工程へ戻しますか？");
   if (!confirmed) return;
@@ -1056,6 +1105,7 @@ function resetSample() {
   setStatus("サンプル工程へ戻しました");
 }
 
+// 現在の工程データをJSONとしてダウンロードします。
 function exportJson() {
   const payload = JSON.stringify(
     {
@@ -1077,6 +1127,7 @@ function exportJson() {
   setStatus("JSONをエクスポートしました");
 }
 
+// JSONファイルを読み込み、工程データとして反映します。
 function importJson(event) {
   const file = event.target.files?.[0];
   if (!file) return;
@@ -1102,6 +1153,7 @@ function importJson(event) {
   reader.readAsText(file);
 }
 
+// CPM風に最早/最遅日、余裕日数、クリティカル判定を計算します。
 function calculateSchedule(tasks, dependencies) {
   const taskById = new Map(tasks.map((taskItem) => [taskItem.id, taskItem]));
   const result = new Map();
@@ -1206,6 +1258,7 @@ function calculateSchedule(tasks, dependencies) {
   };
 }
 
+// FS/SS/FF/SFの依存種別を開始日基準のオフセットへ変換します。
 function dependencyOffset(item, fromTask, toTask) {
   const lag = Number(item.lag) || 0;
   const fromDuration = Number(fromTask?.duration) || 0;
@@ -1216,6 +1269,7 @@ function dependencyOffset(item, fromTask, toTask) {
   return fromDuration + lag;
 }
 
+// 新しい依存を追加しても循環しないか確認します。
 function hasCycle(tasks, dependencies) {
   const taskIds = new Set(tasks.map((taskItem) => taskItem.id));
   const outgoing = new Map(tasks.map((taskItem) => [taskItem.id, []]));
@@ -1241,12 +1295,14 @@ function hasCycle(tasks, dependencies) {
   return visited !== tasks.length;
 }
 
+// 依存線がクリティカルパス上にあるか判定します。
 function isDependencyCritical(item, fromTask, toTask, fromData, toData) {
   if (!fromData || !toData || !fromData.critical || !toData.critical) return false;
   const offset = dependencyOffset(item, fromTask, toTask);
   return Math.abs(toData.es - (fromData.es + offset)) < 0.001;
 }
 
+// 現在の検索・領域フィルターに合うタスクだけを返します。
 function getVisibleTasks() {
   const query = (state.search || "").trim().toLowerCase();
   return state.tasks.filter((taskItem) => {
@@ -1256,18 +1312,22 @@ function getVisibleTasks() {
   });
 }
 
+// タスクIDからタスクを引きやすいMapを作ります。
 function getTaskMap() {
   return new Map(state.tasks.map((taskItem) => [taskItem.id, taskItem]));
 }
 
+// タスクIDからタスクを探します。
 function getTask(id) {
   return state.tasks.find((taskItem) => taskItem.id === id);
 }
 
+// 現在選択中のタスクを返します。
 function getSelectedTask() {
   return getTask(state.selectedTaskId);
 }
 
+// 表示用に、先行タスクのコード一覧を返します。
 function getPredecessorCodes(taskId) {
   return state.dependencies
     .filter((item) => item.to === taskId)
@@ -1275,6 +1335,7 @@ function getPredecessorCodes(taskId) {
     .filter(Boolean);
 }
 
+// 同じ接続の依存線が重複しないように整理します。
 function dedupeDependencies(dependencies) {
   const seen = new Set();
   const clean = [];
@@ -1287,6 +1348,7 @@ function dedupeDependencies(dependencies) {
   return clean;
 }
 
+// 領域ごとの次のタスクコードを採番します。
 function nextTaskCode(area) {
   const prefixMap = {
     Engineering: "E",
@@ -1304,22 +1366,26 @@ function nextTaskCode(area) {
   return `${prefix}${next}`;
 }
 
+// select要素に差し込むoption HTMLを作ります。
 function optionsHtml(values, selected) {
   return values
     .map((value) => `<option value="${escapeAttr(value)}" ${value === selected ? "selected" : ""}>${escapeHtml(value)}</option>`)
     .join("");
 }
 
+// 画面内で使う一意IDを生成します。
 function uid(prefix) {
   return `${prefix}${Math.random().toString(36).slice(2, 9)}`;
 }
 
+// 数値を範囲内に丸め、不正値ならフォールバックを返します。
 function clampInt(value, min, max, fallback) {
   const number = Number.parseInt(value, 10);
   if (!Number.isFinite(number)) return fallback;
   return Math.min(max, Math.max(min, number));
 }
 
+// HTMLへ差し込む文字列をエスケープします。
 function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -1329,20 +1395,24 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+// 属性値用のエスケープです。
 function escapeAttr(value) {
   return escapeHtml(value);
 }
 
+// YYYY-MM-DD形式の日付文字列かどうかを確認します。
 function isIsoDate(value) {
   return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
+// ISO日付に日数を足した日付文字列を返します。
 function addDays(isoDate, days) {
   const date = new Date(`${isoDate}T00:00:00`);
   date.setDate(date.getDate() + days);
   return date;
 }
 
+// DateをYYYY-MM-DD形式へ整形します。
 function formatDate(date) {
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }

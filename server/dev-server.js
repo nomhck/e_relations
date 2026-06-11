@@ -7,23 +7,23 @@ const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || "127.0.0.1";
 const webRoot = path.resolve(__dirname, "../web");
 
-// Local development server: serves static web files and a tiny JSON API on one port.
+// ローカル開発サーバーです。静的フロントエンドと小さなJSON APIを同じポートで配信します。
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
 
-    // Create a new plan through the local API.
+    // ローカルAPI経由で新しい工程プランを作成します。
     if (url.pathname === "/api/plans" && req.method === "POST") {
       return handlePlans(req, res, {});
     }
 
-    // Read or save an existing plan by id.
+    // URL上のIDを使って既存プランを読み込み、または保存します。
     const planMatch = url.pathname.match(/^\/api\/plans\/([^/]+)$/);
     if (planMatch) {
       return handlePlans(req, res, { id: planMatch[1] });
     }
 
-    // Everything else is treated as a static frontend request.
+    // それ以外のリクエストは、フロントエンド静的ファイルとして扱います。
     return serveStatic(url.pathname, res);
   } catch (error) {
     console.error(error);
@@ -31,13 +31,13 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-// Bind to loopback by default so the MVP server is not exposed on the LAN.
+// 初期状態ではlocalhostだけで待ち受け、LANへ不用意に公開しないようにします。
 server.listen(port, host, () => {
   console.log(`E Relations local server`);
   console.log(`http://${host}:${port}`);
 });
 
-// Serve a static file. Unknown paths fall back to index.html for client-side routing.
+// 静的ファイルを返します。不明なパスはクライアント側ルーティング用にindex.htmlへ戻します。
 async function serveStatic(pathname, res) {
   const filePath = resolveStaticPath(pathname);
   const data = await fs.readFile(filePath).catch(async (error) => {
@@ -49,7 +49,7 @@ async function serveStatic(pathname, res) {
   res.end(data);
 }
 
-// Resolve requested paths inside webRoot and block path traversal.
+// 要求パスをwebRoot内に解決し、ディレクトリ外へ抜けるアクセスを防ぎます。
 function resolveStaticPath(pathname) {
   const clean = pathname === "/" ? "/index.html" : pathname;
   const resolved = path.resolve(webRoot, `.${clean}`);
@@ -57,7 +57,7 @@ function resolveStaticPath(pathname) {
   return resolved;
 }
 
-// Minimal content-type mapping for the files this MVP serves.
+// このMVPで配信するファイルに必要な最小限のContent-Type対応です。
 function contentType(filePath) {
   if (filePath.endsWith(".html")) return "text/html; charset=utf-8";
   if (filePath.endsWith(".css")) return "text/css; charset=utf-8";
