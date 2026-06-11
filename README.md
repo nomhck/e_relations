@@ -57,6 +57,11 @@ node --check web/app.js
 ## GitHub Pages
 
 `docs/` 配下に静的GUIを配置しています。GitHub PagesではAPIは動かないため、保存はブラウザのlocalStorageのみです。
+画面の本体は `web/` です。GitHub Pagesへ反映する前に、次のコマンドで `web/` の内容を `docs/` へ同期します。
+
+```bash
+npm run sync-docs
+```
 
 公開URL:
 

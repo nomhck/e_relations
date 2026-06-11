@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node server/dev-server.js",
+    "sync-docs": "cp web/index.html docs/index.html && cp web/styles.css docs/styles.css && cp web/app.js docs/app.js",
     "check": "node --check server/dev-server.js && node --check api/handlers/plans.js && node --check api/lib/storage.local.js && node --check web/app.js"
   }
 }
