@@ -31,10 +31,27 @@
           <span class="action-icon">⇄</span>
           <span>自動整列</span>
         </button>
+        <button id="undoAction" class="action-button utility" title="元に戻す" aria-label="元に戻す" disabled>
+          <span class="action-icon">↶</span>
+          <span>戻す</span>
+        </button>
+        <button id="redoAction" class="action-button utility" title="やり直す" aria-label="やり直す" disabled>
+          <span class="action-icon">↷</span>
+          <span>進む</span>
+        </button>
+        <button id="exportJson" class="action-button file-action" title="工程JSONを書き出す" aria-label="工程JSONを書き出す">
+          <span class="action-icon">⇩</span>
+          <span>JSON出力</span>
+        </button>
+        <button id="importJson" class="action-button file-action" title="工程JSONを取り込む" aria-label="工程JSONを取り込む">
+          <span class="action-icon">⇧</span>
+          <span>JSON取込</span>
+        </button>
         <button id="resetData" class="action-button danger" title="サンプル工程に戻す" aria-label="サンプル工程に戻す">
           <span class="action-icon">↺</span>
           <span>初期化</span>
         </button>
+        <input id="importFile" type="file" accept="application/json,.json" hidden>
       </div>
 
       <!-- 依存接続モード中だけ表示する、依存種別、ラグ、線ラベルの設定です。 -->
@@ -101,6 +118,7 @@
               <button class="density-option active" type="button" data-density="standard" aria-pressed="true">標準</button>
               <button class="density-option" type="button" data-density="compact" aria-pressed="false">コンパクト</button>
             </div>
+            <div id="edgeSummary" class="edge-summary">依存線をクリックすると詳細を表示</div>
           </div>
           <div class="network" id="network">
             <div id="areaBands" class="area-bands"></div>

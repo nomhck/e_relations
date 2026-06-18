@@ -13,6 +13,8 @@ const LAYOUT_MARGIN_Y = 54;
 const LAYOUT_COL_W = 245;
 const LAYOUT_AREA_GAP = 68;
 const DAY_W = 18;
+const HISTORY_LIMIT = 50;
+const EXPORT_FORMAT = "e-relations-plan";
 
 // EPCでよく使う領域、表示色、依存種別、ステータス、レベルのマスターです。
 const DEFAULT_AREAS = ["Engineering", "Procurement", "Fabrication", "Construction", "Commissioning"];
@@ -37,6 +39,10 @@ let drag = null;
 let skipClick = false;
 let remoteSaveTimer = null;
 let networkBounds = { width: NETWORK_MIN_W, height: NETWORK_MIN_H };
+let undoStack = [];
+let redoStack = [];
+let lastPlanSnapshot = planDataSnapshot(state);
+let lastHistorySnapshot = historyStateSnapshot(state);
 
 // DOM参照を短く書くためのヘルパーと、初期化後に埋める要素キャッシュです。
 const $ = (selector) => document.querySelector(selector);
@@ -60,18 +66,25 @@ document.addEventListener("DOMContentLoaded", async () => {
     addTask: $("#addTask"),
     linkMode: $("#linkMode"),
     autoLayout: $("#autoLayout"),
+    undoAction: $("#undoAction"),
+    redoAction: $("#redoAction"),
+    exportJson: $("#exportJson"),
+    importJson: $("#importJson"),
+    importFile: $("#importFile"),
     resetData: $("#resetData"),
     linkSettings: $("#linkSettings"),
     relationType: $("#relationType"),
     lagDays: $("#lagDays"),
     edgeLabel: $("#edgeLabel"),
     networkView: $("#networkView"),
+    edgeSummary: $("#edgeSummary"),
     focusSelected: $("#focusSelected"),
     densityButtons: [...document.querySelectorAll("[data-density]")]
   });
 
   bindEvents();
   await loadRemotePlan();
+  initializeHistory();
   render();
 });
 
@@ -92,6 +105,11 @@ function bindEvents() {
     render();
     setStatus("重なりを避けて自動整列しました");
   });
+  els.undoAction.addEventListener("click", undoPlanChange);
+  els.redoAction.addEventListener("click", redoPlanChange);
+  els.exportJson.addEventListener("click", exportPlanJson);
+  els.importJson.addEventListener("click", () => els.importFile.click());
+  els.importFile.addEventListener("change", importPlanFile);
   els.resetData.addEventListener("click", () => {
     // 初期化では、ブラウザ上の編集内容を内蔵サンプル工程へ戻します。
     if (!window.confirm("サンプル工程に戻します。現在の編集内容は置き換わります。")) return;
@@ -206,6 +224,7 @@ function bindEvents() {
   els.inspector.addEventListener("change", onInspectorChange);
   els.inspector.addEventListener("input", onInspectorInput);
   els.inspector.addEventListener("click", onInspectorClick);
+  document.addEventListener("keydown", onGlobalKeydown);
 }
 
 // ブラウザに保存された直近状態を読み込みます。壊れたJSONならサンプルへ戻します。
@@ -220,9 +239,96 @@ function loadState() {
 }
 
 // localStorageへ即時保存し、ローカルAPIへの保存は短時間まとめて実行します。
-function saveState() {
+function saveState(options = {}) {
+  if (options.history !== false) recordHistory();
+  persistState();
+}
+
+function persistState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   scheduleRemoteSave();
+  updateHistoryControls();
+}
+
+// タスク、依存線、領域に変化があったときだけUndo履歴へ積みます。
+function recordHistory() {
+  const nextPlanSnapshot = planDataSnapshot(state);
+  if (nextPlanSnapshot !== lastPlanSnapshot) {
+    undoStack.push(lastHistorySnapshot);
+    if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+    redoStack = [];
+  }
+  refreshHistorySnapshots();
+}
+
+function initializeHistory() {
+  undoStack = [];
+  redoStack = [];
+  refreshHistorySnapshots();
+  updateHistoryControls();
+}
+
+function refreshHistorySnapshots() {
+  lastPlanSnapshot = planDataSnapshot(state);
+  lastHistorySnapshot = historyStateSnapshot(state);
+}
+
+function updateHistoryControls() {
+  if (!els.undoAction || !els.redoAction) return;
+  els.undoAction.disabled = undoStack.length === 0;
+  els.redoAction.disabled = redoStack.length === 0;
+}
+
+function planDataSnapshot(value = state) {
+  return JSON.stringify({
+    areas: value.areas || [],
+    tasks: value.tasks || [],
+    dependencies: value.dependencies || []
+  });
+}
+
+function historyStateSnapshot(value = state) {
+  return JSON.stringify({
+    areas: value.areas || [],
+    tasks: value.tasks || [],
+    dependencies: value.dependencies || [],
+    selected: value.selected || null,
+    selectedDependency: value.selectedDependency || null
+  });
+}
+
+function restoreHistorySnapshot(snapshot) {
+  const restored = JSON.parse(snapshot);
+  state = normalizeState({
+    ...state,
+    ...restored,
+    linkMode: false,
+    linkSource: null
+  });
+  refreshHistorySnapshots();
+}
+
+function undoPlanChange() {
+  if (!undoStack.length) return;
+  const current = historyStateSnapshot(state);
+  const previous = undoStack.pop();
+  redoStack.push(current);
+  restoreHistorySnapshot(previous);
+  persistState();
+  render();
+  setStatus("元に戻しました");
+}
+
+function redoPlanChange() {
+  if (!redoStack.length) return;
+  const current = historyStateSnapshot(state);
+  const next = redoStack.pop();
+  undoStack.push(current);
+  if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+  restoreHistorySnapshot(next);
+  persistState();
+  render();
+  setStatus("やり直しました");
 }
 
 // 開発サーバーが動いている場合は、共有デモ工程をローカルAPIから読み込みます。
@@ -257,6 +363,123 @@ function scheduleRemoteSave() {
       // ローカルAPIが止まっていても、画面操作自体は続けられるようにします。
     });
   }, 250);
+}
+
+// GitHub Pagesでも工程を持ち出せるよう、現在の状態をJSONファイルとして保存します。
+function exportPlanJson() {
+  const payload = {
+    format: EXPORT_FORMAT,
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    plan: exportPlanData()
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `e-relations-${todayText()}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+  setStatus("工程JSONを書き出しました");
+}
+
+function exportPlanData() {
+  return {
+    view: state.view,
+    area: state.area,
+    search: state.search,
+    selected: state.selected,
+    selectedDependency: state.selectedDependency,
+    criticalOnly: state.criticalOnly,
+    networkDensity: state.networkDensity,
+    relationType: state.relationType,
+    lagDays: state.lagDays,
+    edgeLabel: state.edgeLabel,
+    areas: state.areas,
+    tasks: state.tasks,
+    dependencies: state.dependencies
+  };
+}
+
+// JSON取込時は形と循環依存を先に確認し、壊れた工程で画面を上書きしないようにします。
+async function importPlanFile(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const plan = extractImportedPlan(parsed);
+    const validationError = validatePlanData(plan);
+    if (validationError) {
+      setStatus(validationError, "error");
+      return;
+    }
+
+    state = normalizeState({
+      ...state,
+      ...plan,
+      linkMode: false,
+      linkSource: null
+    });
+    saveState();
+    render();
+    setStatus(`工程JSONを取り込みました: ${file.name}`);
+  } catch {
+    setStatus("JSONを取り込めませんでした", "error");
+  } finally {
+    event.target.value = "";
+  }
+}
+
+function extractImportedPlan(value) {
+  if (value?.format === EXPORT_FORMAT && value.plan) return value.plan;
+  if (value?.plan?.tasks && value?.plan?.dependencies) return value.plan;
+  return value;
+}
+
+function validatePlanData(plan) {
+  if (!plan || typeof plan !== "object") return "JSON内に工程データがありません";
+  if (!Array.isArray(plan.tasks)) return "tasks が配列ではありません";
+  if (!Array.isArray(plan.dependencies)) return "dependencies が配列ではありません";
+
+  const rawIds = new Set();
+  for (const taskItem of plan.tasks) {
+    const id = String(taskItem?.id || "").trim();
+    if (!id) return "id のないタスクがあります";
+    if (rawIds.has(id)) return `タスクIDが重複しています: ${id}`;
+    rawIds.add(id);
+  }
+
+  const normalized = normalizeState({ ...state, ...plan });
+  const ids = new Set(normalized.tasks.map((taskItem) => taskItem.id));
+  for (const item of normalized.dependencies) {
+    if (item.from === item.to) return "自己依存を含むJSONは取り込めません";
+    if (!ids.has(item.from)) return `存在しない先行タスクがあります: ${item.from}`;
+    if (!ids.has(item.to)) return `存在しない後続タスクがあります: ${item.to}`;
+  }
+
+  if (hasCycle(normalized.tasks, normalized.dependencies)) {
+    return "循環依存を含むJSONは取り込めません";
+  }
+
+  return "";
+}
+
+function onGlobalKeydown(event) {
+  if (!(event.metaKey || event.ctrlKey)) return;
+  if (event.target instanceof Element && event.target.closest("input, textarea, select")) return;
+
+  const key = event.key.toLowerCase();
+  if (key === "z" && !event.shiftKey) {
+    event.preventDefault();
+    undoPlanChange();
+  } else if (key === "y" || (key === "z" && event.shiftKey)) {
+    event.preventDefault();
+    redoPlanChange();
+  }
 }
 
 // 初回表示、初期化、GitHub Pagesの静的デモで使う内蔵EPC工程サンプルです。
@@ -348,6 +571,8 @@ function render() {
   els.linkMode.classList.toggle("active", state.linkMode);
   els.linkMode.querySelector("span:last-child").textContent = state.linkMode ? "接続中" : "依存接続";
   els.linkSettings.classList.toggle("active", state.linkMode);
+  updateHistoryControls();
+  renderEdgeSummary();
 
   renderMetrics();
   renderFilters();
@@ -368,6 +593,31 @@ function render() {
   } else {
     setStatus("待機中");
   }
+}
+
+// 接続モードや選択中の依存線を、ネットワーク上部へ短く表示します。
+function renderEdgeSummary() {
+  const selected = getDependency(state.selectedDependency);
+  if (selected) {
+    const from = getTask(selected.from);
+    const to = getTask(selected.to);
+    els.edgeSummary.innerHTML = `
+      <strong>${escapeHtml(from ? from.code : selected.from)} → ${escapeHtml(to ? to.code : selected.to)}</strong>
+      <span>${escapeHtml(dependencyLabel(selected))}</span>
+    `;
+    return;
+  }
+
+  if (state.linkMode && state.linkSource) {
+    const source = getTask(state.linkSource);
+    els.edgeSummary.innerHTML = `
+      <strong>${escapeHtml(source ? source.code : state.linkSource)} から接続</strong>
+      <span>${escapeHtml(state.relationType)}${state.lagDays ? ` ${state.lagDays > 0 ? "+" : ""}${state.lagDays}日` : ""}</span>
+    `;
+    return;
+  }
+
+  els.edgeSummary.textContent = state.linkMode ? "先行タスクを選択" : "依存線をクリックすると詳細を表示";
 }
 
 // 工期、タスク数、依存線数、クリティカル数などの概要カードを描画します。
@@ -459,12 +709,14 @@ function renderNetwork() {
   const visible = visibleTasks();
   const visibleIds = new Set(visible.map((taskItem) => taskItem.id));
   const size = nodeSize();
+  const selectedDep = getDependency(state.selectedDependency);
   networkBounds = calculateNetworkBounds(visible);
   els.network.style.width = `${networkBounds.width}px`;
   els.network.style.height = `${networkBounds.height}px`;
   els.network.style.setProperty("--node-width", `${size.width}px`);
   els.network.style.setProperty("--node-height", `${size.height}px`);
   els.network.classList.toggle("compact", state.networkDensity === "compact");
+  els.network.classList.toggle("has-selected-dependency", Boolean(selectedDep));
   renderAreaBands(visible, networkBounds);
   renderEdges(visibleIds, networkBounds);
 
@@ -473,7 +725,7 @@ function renderNetwork() {
       const data = schedule.items.get(taskItem.id);
       const timing = computeTaskStatus(taskItem);
       return `
-        <article class="node ${taskItem.id === state.selected ? "selected" : ""} ${data.critical ? "critical" : ""} ${taskItem.id === state.linkSource ? "link-source" : ""}"
+        <article class="node ${taskItem.id === state.selected ? "selected" : ""} ${data.critical ? "critical" : ""} ${taskItem.id === state.linkSource ? "link-source" : ""} ${selectedDep?.from === taskItem.id ? "dependency-source" : ""} ${selectedDep?.to === taskItem.id ? "dependency-target" : ""}"
           data-id="${taskItem.id}" style="left:${taskItem.x}px;top:${taskItem.y}px;--area-color:${areaColor(taskItem.area)}">
           <div class="node-head">
             <span class="node-code">${escapeHtml(taskItem.code)}</span>
@@ -1222,6 +1474,10 @@ function predecessorSummaries(id) {
 // タスクIDからタスクを探します。
 function getTask(id) {
   return state.tasks.find((taskItem) => taskItem.id === id);
+}
+
+function getDependency(id) {
+  return state.dependencies.find((item) => item.id === id);
 }
 
 // 古いlocalStorageやJSONでも、新しい項目を補完して動くように正規化します。

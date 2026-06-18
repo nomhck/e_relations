@@ -135,6 +135,19 @@ button {
   color: var(--red);
 }
 
+.actions .action-button.utility {
+  min-width: 74px;
+}
+
+.actions .action-button.file-action {
+  min-width: 106px;
+}
+
+.actions .action-button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
 /* 依存接続設定: 接続モード中だけ表示される種別、ラグ、線ラベルの入力欄です。 */
 .link-settings {
   display: none;
@@ -532,6 +545,33 @@ button {
   box-shadow: 0 1px 4px rgba(23, 33, 29, 0.12);
 }
 
+.edge-summary {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--muted);
+  padding: 6px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.edge-summary strong {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.edge-summary span {
+  border-radius: 999px;
+  background: #fff8e1;
+  color: #8a4b00;
+  padding: 2px 7px;
+  font-weight: 800;
+}
+
 .network {
   position: relative;
   width: 1350px;
@@ -620,6 +660,14 @@ button {
   stroke-width: 4;
 }
 
+.network.has-selected-dependency .edge-group:not(.selected) .edge {
+  opacity: 0.28;
+}
+
+.network.has-selected-dependency .edge-group:not(.selected) .edge-label {
+  opacity: 0.42;
+}
+
 .edge-label {
   font-size: 11px;
   font-weight: 800;
@@ -664,6 +712,20 @@ button {
 .node.link-source {
   outline: 3px solid rgba(242, 153, 0, 0.28);
   border-color: var(--orange);
+}
+
+.node.dependency-source,
+.node.dependency-target {
+  outline: 3px solid rgba(242, 153, 0, 0.28);
+  border-color: var(--orange);
+}
+
+.node.dependency-source {
+  box-shadow: 0 0 0 4px rgba(242, 153, 0, 0.12), 0 8px 18px rgba(60, 64, 67, 0.14);
+}
+
+.node.dependency-target {
+  box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.12), 0 8px 18px rgba(60, 64, 67, 0.14);
 }
 
 .node-head,
@@ -1098,6 +1160,12 @@ tr.selected {
     min-width: 0;
     height: 34px;
     padding: 0 9px;
+  }
+
+  .actions .action-button.utility,
+  .actions .action-button.file-action {
+    width: auto;
+    min-width: 0;
   }
 
   .link-settings.active {
