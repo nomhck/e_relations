@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>E Relations</title>
-    <link rel="stylesheet" href="./styles.css?v=7">
+    <link rel="stylesheet" href="./styles.css?v=8">
   </head>
   <body>
     <!-- 画面上部: ブランド名、主要操作、依存接続時の入力設定をまとめるヘッダーです。 -->
@@ -31,13 +31,13 @@
           <span class="action-icon">⇄</span>
           <span>自動整列</span>
         </button>
-        <button id="undoAction" class="action-button utility" title="元に戻す" aria-label="元に戻す" disabled>
+        <button id="undoAction" class="action-button utility" title="タスク・依存線の編集を元に戻す" aria-label="タスク・依存線の編集を元に戻す" disabled>
           <span class="action-icon">↶</span>
-          <span>戻す</span>
+          <span>編集戻す</span>
         </button>
-        <button id="redoAction" class="action-button utility" title="やり直す" aria-label="やり直す" disabled>
+        <button id="redoAction" class="action-button utility" title="タスク・依存線の編集をやり直す" aria-label="タスク・依存線の編集をやり直す" disabled>
           <span class="action-icon">↷</span>
-          <span>進む</span>
+          <span>編集進む</span>
         </button>
         <button id="exportJson" class="action-button file-action" title="工程JSONを書き出す" aria-label="工程JSONを書き出す">
           <span class="action-icon">⇩</span>
@@ -160,6 +160,6 @@
       <aside class="inspector" id="inspector"></aside>
     </main>
 
-    <script src="./app.js?v=7"></script>
+    <script src="./app.js?v=8"></script>
   </body>
 </html>
