@@ -637,31 +637,66 @@ button {
 
 .edge {
   fill: none;
-  stroke: #80868b;
-  stroke-width: 2;
+  stroke: #5f6368;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   pointer-events: none;
+  transition: opacity 140ms ease, stroke-width 140ms ease, filter 140ms ease;
+  vector-effect: non-scaling-stroke;
+}
+
+.edge-shadow {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 6.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.86;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
 }
 
 .edge-hit {
   fill: none;
   stroke: transparent;
-  stroke-width: 18;
+  stroke-width: 22;
   cursor: pointer;
   pointer-events: stroke;
 }
 
 .edge.critical {
   stroke: var(--red);
-  stroke-width: 3;
+  stroke-width: 3.2;
+}
+
+.edge-shadow.critical {
+  stroke: #fff;
+  opacity: 0.92;
 }
 
 .edge.selected {
   stroke: var(--orange);
-  stroke-width: 4;
+  stroke-width: 4.2;
+  filter: url(#edgeGlow);
+}
+
+.edge-shadow.selected {
+  stroke: var(--orange);
+  stroke-width: 9;
+  opacity: 0.2;
+}
+
+.edge-group:hover .edge {
+  stroke-width: 3.4;
 }
 
 .network.has-selected-dependency .edge-group:not(.selected) .edge {
   opacity: 0.28;
+}
+
+.network.has-selected-dependency .edge-group:not(.selected) .edge-shadow {
+  opacity: 0.34;
 }
 
 .network.has-selected-dependency .edge-group:not(.selected) .edge-label {

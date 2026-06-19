@@ -755,11 +755,17 @@ function renderEdges(visibleIds, bounds = networkBounds) {
 
   const defs = `
     <defs>
-      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="#80868b"></path>
+      <filter id="edgeGlow" x="-20%" y="-20%" width="140%" height="140%">
+        <feDropShadow dx="0" dy="1.5" stdDeviation="2.2" flood-color="#f29900" flood-opacity="0.42"></feDropShadow>
+      </filter>
+      <marker id="arrow" viewBox="0 0 12 12" refX="10.4" refY="6" markerWidth="14" markerHeight="14" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M 1.8 1.5 L 10.6 6 L 1.8 10.5 L 4.1 6 Z" fill="#5f6368"></path>
       </marker>
-      <marker id="arrowCritical" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="#b3261e"></path>
+      <marker id="arrowCritical" viewBox="0 0 12 12" refX="10.4" refY="6" markerWidth="15" markerHeight="15" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M 1.8 1.5 L 10.6 6 L 1.8 10.5 L 4.1 6 Z" fill="#b3261e"></path>
+      </marker>
+      <marker id="arrowSelected" viewBox="0 0 12 12" refX="10.4" refY="6" markerWidth="16" markerHeight="16" orient="auto" markerUnits="userSpaceOnUse">
+        <path d="M 1.8 1.5 L 10.6 6 L 1.8 10.5 L 4.1 6 Z" fill="#f29900"></path>
       </marker>
     </defs>
   `;
@@ -795,12 +801,14 @@ function renderEdges(visibleIds, bounds = networkBounds) {
       const labelX = (x1 + x2) / 2;
       const labelY = (y1 + y2) / 2 + bend * 0.45 - 8;
       const selected = state.selectedDependency === item.id;
+      const markerId = selected ? "arrowSelected" : critical ? "arrowCritical" : "arrow";
       const path = `M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`;
 
       return `
         <g class="edge-group ${selected ? "selected" : ""}" data-dependency-id="${escapeAttr(item.id)}">
           <path class="edge-hit" d="${path}"></path>
-          <path class="edge ${critical ? "critical" : ""} ${selected ? "selected" : ""}" d="${path}" marker-end="url(#${critical ? "arrowCritical" : "arrow"})"></path>
+          <path class="edge-shadow ${critical ? "critical" : ""} ${selected ? "selected" : ""}" d="${path}"></path>
+          <path class="edge ${critical ? "critical" : ""} ${selected ? "selected" : ""}" d="${path}" marker-end="url(#${markerId})"></path>
           <text class="edge-label ${selected ? "selected" : ""}" x="${labelX}" y="${labelY}">${escapeHtml(label)}</text>
         </g>
       `;
