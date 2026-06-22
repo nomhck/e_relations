@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>E Relations</title>
-    <link rel="stylesheet" href="./styles.css?v=10">
+    <link rel="stylesheet" href="./styles.css?v=11">
   </head>
   <body>
     <!-- 画面上部: ブランド名、主要操作、依存接続時の入力設定をまとめるヘッダーです。 -->
@@ -75,53 +75,12 @@
 
     <!-- 画面本体: 左の集計/フィルター、中央の作業ビュー、右の詳細編集で構成します。 -->
     <main class="layout">
-      <!-- 左サイドバー: 工程概要、操作ガイド、領域フィルター、注目タスクを表示します。 -->
+      <!-- 左サイドバー: 工程概要、領域フィルター、注目タスクを表示します。 -->
       <aside class="sidebar">
         <section>
           <div class="eyebrow">概要</div>
           <h2>Greenfield Process Unit</h2>
           <div class="metrics" id="metrics"></div>
-        </section>
-
-        <section class="guide-section">
-          <div class="eyebrow">操作ガイド</div>
-          <div class="guide-list">
-            <div class="guide-step">
-              <span class="guide-index">1</span>
-              <div>
-                <strong>追加・編集</strong>
-                <span>タスク追加後、右の詳細で編集。カードはドラッグで配置。</span>
-              </div>
-            </div>
-            <div class="guide-step">
-              <span class="guide-index">2</span>
-              <div>
-                <strong>依存をつなぐ</strong>
-                <span>依存接続を押し、先行→後続の順にクリック。</span>
-              </div>
-            </div>
-            <div class="guide-step">
-              <span class="guide-index">3</span>
-              <div>
-                <strong>線を直す</strong>
-                <span>線をクリックし、右の詳細で修正・削除。</span>
-              </div>
-            </div>
-            <div class="guide-step">
-              <span class="guide-index">4</span>
-              <div>
-                <strong>見方を変える</strong>
-                <span>タブ、検索、領域フィルターで絞り込み。</span>
-              </div>
-            </div>
-            <div class="guide-step">
-              <span class="guide-index">5</span>
-              <div>
-                <strong>安全に試す</strong>
-                <span>編集戻す/進む、JSON出力/取込で復旧。</span>
-              </div>
-            </div>
-          </div>
         </section>
 
         <section>
@@ -135,13 +94,14 @@
         </section>
       </aside>
 
-      <!-- 中央ステージ: ネットワーク、ガント、表をタブで切り替える主作業領域です。 -->
+      <!-- 中央ステージ: ネットワーク、ガント、表、操作ガイドをタブで切り替える主作業領域です。 -->
       <section class="stage">
         <div class="stage-head">
           <div class="tabs">
             <button class="tab active" data-view="network">ネットワーク</button>
             <button class="tab" data-view="gantt">ガント</button>
             <button class="tab" data-view="table">表</button>
+            <button class="tab" data-view="guide">操作ガイド</button>
           </div>
           <input id="search" class="search" type="search" placeholder="コード・タスク・担当で検索">
         </div>
@@ -195,12 +155,82 @@
             </table>
           </div>
         </section>
+
+        <!-- 操作ガイドビュー: 迷ったときに基本操作とビューの使い分けを確認します。 -->
+        <section class="view guide-view" id="guideView" aria-label="操作ガイド">
+          <div class="guide-content">
+            <div class="guide-hero">
+              <div>
+                <div class="eyebrow">操作ガイド</div>
+                <h2>迷ったらここだけ確認</h2>
+                <p>基本は「タスクを作る」「依存をつなぐ」「必要なビューで確認する」の3つです。</p>
+              </div>
+              <div class="guide-flow">
+                <strong>基本の流れ</strong>
+                <span>タスク追加 → 詳細編集 → 依存接続 → ガント/表で確認 → JSON出力</span>
+              </div>
+            </div>
+
+            <div class="guide-grid">
+              <article class="guide-card">
+                <span class="guide-index">1</span>
+                <div>
+                  <h3>タスクを追加・編集する</h3>
+                  <p>上部の「タスク追加」で工程を増やし、右の詳細で名称、期間、進捗、予定日を編集します。ネットワーク上のカードはドラッグで移動できます。</p>
+                </div>
+              </article>
+              <article class="guide-card">
+                <span class="guide-index">2</span>
+                <div>
+                  <h3>依存関係をつなぐ</h3>
+                  <p>「依存接続」を押してから、先行タスク、後続タスクの順にクリックします。依存種別、ラグ日数、線ラベルは上部の接続設定で指定します。</p>
+                </div>
+              </article>
+              <article class="guide-card">
+                <span class="guide-index">3</span>
+                <div>
+                  <h3>線を修正・削除する</h3>
+                  <p>ネットワーク上の依存線をクリックすると、右の詳細に接続元、接続先、依存種別、ラグが出ます。そこで修正や削除ができます。</p>
+                </div>
+              </article>
+              <article class="guide-card">
+                <span class="guide-index">4</span>
+                <div>
+                  <h3>見方を切り替える</h3>
+                  <p>ネットワークは関係整理、ガントは日程感、表は項目確認と一括編集に向いています。検索と領域フィルターは各ビューに共通で効きます。</p>
+                </div>
+              </article>
+              <article class="guide-card">
+                <span class="guide-index">5</span>
+                <div>
+                  <h3>安全に試す</h3>
+                  <p>間違えたら「編集戻す」「編集進む」で戻せます。共有や保管をしたい場合は「JSON出力」、受け取った工程は「JSON取込」を使います。</p>
+                </div>
+              </article>
+            </div>
+
+            <div class="guide-reference">
+              <div class="guide-reference-item">
+                <strong>ネットワーク</strong>
+                <span>タスクの前後関係を見ながら、カードと線を直接操作する画面です。</span>
+              </div>
+              <div class="guide-reference-item">
+                <strong>ガント</strong>
+                <span>依存関係から計算された開始位置と期間を横棒で確認する画面です。</span>
+              </div>
+              <div class="guide-reference-item">
+                <strong>表</strong>
+                <span>コード、状態、期間、進捗、予定完了などを一覧で確認・編集する画面です。</span>
+              </div>
+            </div>
+          </div>
+        </section>
       </section>
 
       <!-- 右ペイン: 選択タスクと接続依存線の詳細を編集します。 -->
       <aside class="inspector" id="inspector"></aside>
     </main>
 
-    <script src="./app.js?v=10"></script>
+    <script src="./app.js?v=11"></script>
   </body>
 </html>

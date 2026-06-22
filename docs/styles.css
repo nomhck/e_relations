@@ -260,59 +260,10 @@ button {
   font-size: 12px;
 }
 
-.focus-list,
-.guide-list {
+.focus-list {
   display: grid;
   gap: 8px;
   margin-top: 12px;
-}
-
-.guide-section {
-  background: linear-gradient(180deg, #f8fafd, #ffffff);
-}
-
-.guide-list {
-  gap: 7px;
-}
-
-.guide-step {
-  display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
-  gap: 8px;
-  align-items: start;
-  padding: 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-}
-
-.guide-index {
-  width: 22px;
-  height: 22px;
-  display: inline-grid;
-  place-items: center;
-  border-radius: 999px;
-  background: #e8f0fe;
-  color: var(--teal-dark);
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.guide-step strong,
-.guide-step span {
-  display: block;
-}
-
-.guide-step strong {
-  font-size: 13px;
-  line-height: 1.2;
-}
-
-.guide-step div > span {
-  margin-top: 3px;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.35;
 }
 
 .filters {
@@ -460,9 +411,9 @@ button {
 }
 
 .tabs {
-  width: min(100%, 460px);
+  width: min(100%, 560px);
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--line);
@@ -519,6 +470,117 @@ button {
 
 .view.active {
   display: block;
+}
+
+/* 操作ガイドビュー: 作業画面を邪魔せず、迷ったときだけ基本操作を確認できます。 */
+.guide-view {
+  overflow: auto;
+  padding: 18px;
+  background: #f8fafd;
+}
+
+.guide-content {
+  display: grid;
+  gap: 16px;
+  max-width: 980px;
+}
+
+.guide-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(260px, 0.8fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.guide-hero h2 {
+  margin: 8px 0 8px;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.guide-hero p {
+  max-width: 640px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.guide-flow,
+.guide-card,
+.guide-reference-item {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.guide-flow {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.guide-flow strong,
+.guide-reference-item strong {
+  font-size: 13px;
+}
+
+.guide-flow span,
+.guide-reference-item span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.guide-card {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 14px;
+}
+
+.guide-card h3 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.guide-card p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.guide-index {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #e8f0fe;
+  color: var(--teal-dark);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.guide-reference {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.guide-reference-item {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
 }
 
 /* ネットワークビュー: ツールバー、広いキャンバス、領域帯、依存線、ノードを重ねて表示します。 */
@@ -1221,6 +1283,15 @@ tr.selected {
     align-items: stretch;
     flex-direction: column;
   }
+
+  .tabs {
+    width: 100%;
+  }
+
+  .guide-hero,
+  .guide-reference {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* モバイル幅: ヘッダー操作と依存設定を2列中心にし、狭い画面で押しやすくします。 */
@@ -1250,6 +1321,18 @@ tr.selected {
   .actions .action-button.file-action {
     width: auto;
     min-width: 0;
+  }
+
+  .tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .guide-view {
+    padding: 12px;
+  }
+
+  .guide-grid {
+    grid-template-columns: 1fr;
   }
 
   .link-settings.active {

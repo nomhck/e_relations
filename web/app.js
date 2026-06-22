@@ -587,6 +587,8 @@ function render() {
     setStatus(`接続中: ${source.code} → 後続タスクを選択`, "warn");
   } else if (state.linkMode) {
     setStatus("接続中: 先行タスクを選択", "warn");
+  } else if (state.view === "guide") {
+    setStatus("操作ガイド: 基本操作とビューの使い分けを確認できます");
   } else if (getTask(state.selected)) {
     const selected = getTask(state.selected);
     setStatus(`選択: ${selected.code} ${selected.name}`);
@@ -1499,7 +1501,7 @@ function normalizeState(raw) {
 
   return {
     ...raw,
-    view: ["network", "gantt", "table"].includes(raw.view) ? raw.view : "network",
+    view: ["network", "gantt", "table", "guide"].includes(raw.view) ? raw.view : "network",
     area,
     search: raw.search || "",
     selected: tasks.some((taskItem) => taskItem.id === raw.selected) ? raw.selected : tasks[0]?.id,
