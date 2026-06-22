@@ -887,7 +887,7 @@ button {
   background: #fff;
   box-shadow: 0 8px 18px rgba(60, 64, 67, 0.14);
   cursor: grab;
-  overflow: hidden;
+  overflow: visible;
   pointer-events: auto;
   transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
   user-select: none;
@@ -927,29 +927,37 @@ button {
   animation: connectionNodePulse 780ms ease-out 1;
 }
 
+.node.connection-source-flash {
+  --connection-ring: rgba(242, 153, 0, 0.34);
+  --connection-ring-soft: rgba(242, 153, 0, 0.13);
+  --connection-ring-clear: rgba(242, 153, 0, 0);
+}
+
+.node.connection-target-flash {
+  --connection-ring: rgba(26, 115, 232, 0.3);
+  --connection-ring-soft: rgba(26, 115, 232, 0.12);
+  --connection-ring-clear: rgba(26, 115, 232, 0);
+}
+
 .node.connection-source-flash::after,
 .node.connection-target-flash::after {
   content: "";
   position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
+  inset: -3px;
+  border: 2px solid var(--connection-ring);
+  border-radius: 11px;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, -50%) scale(0.2);
-  z-index: 0;
+  transform: scale(1);
+  transform-origin: center;
 }
 
 .node.connection-source-flash::after {
-  background: radial-gradient(circle, rgba(242, 153, 0, 0.28) 0 35%, rgba(242, 153, 0, 0.14) 36% 58%, rgba(242, 153, 0, 0) 70%);
-  animation: connectionRipple 820ms ease-out 1;
+  animation: connectionFrameRipple 760ms ease-out 1;
 }
 
 .node.connection-target-flash::after {
-  background: radial-gradient(circle, rgba(26, 115, 232, 0.24) 0 35%, rgba(26, 115, 232, 0.12) 36% 58%, rgba(26, 115, 232, 0) 70%);
-  animation: connectionRipple 820ms ease-out 120ms 1;
+  animation: connectionFrameRipple 760ms ease-out 100ms 1;
 }
 
 .node-head,
@@ -1164,34 +1172,35 @@ button {
 
 @keyframes connectionNodePulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(242, 153, 0, 0.42), 0 8px 18px rgba(60, 64, 67, 0.14);
+    box-shadow: 0 0 0 0 var(--connection-ring), 0 8px 18px rgba(60, 64, 67, 0.14);
     transform: translateY(0) scale(1);
   }
 
   45% {
-    box-shadow: 0 0 0 8px rgba(242, 153, 0, 0.16), 0 12px 24px rgba(60, 64, 67, 0.18);
+    box-shadow: 0 0 0 8px var(--connection-ring-soft), 0 12px 24px rgba(60, 64, 67, 0.18);
     transform: translateY(-2px) scale(1.012);
   }
 
   100% {
-    box-shadow: 0 0 0 15px rgba(242, 153, 0, 0), 0 8px 18px rgba(60, 64, 67, 0.14);
+    box-shadow: 0 0 0 15px var(--connection-ring-clear), 0 8px 18px rgba(60, 64, 67, 0.14);
     transform: translateY(0) scale(1);
   }
 }
 
-@keyframes connectionRipple {
+@keyframes connectionFrameRipple {
   0% {
-    opacity: 0.95;
-    transform: translate(-50%, -50%) scale(0.2);
+    opacity: 0.78;
+    transform: scale(1);
   }
 
-  55% {
-    opacity: 0.42;
+  58% {
+    opacity: 0.25;
   }
 
   100% {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(6.2);
+    border-width: 1px;
+    transform: scale(1.14);
   }
 }
 
