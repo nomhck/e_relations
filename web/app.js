@@ -833,6 +833,11 @@ function renderEdges(visibleIds, bounds = networkBounds) {
           <path class="edge-arc ${critical ? "critical" : ""}" d="${path}" pathLength="1"></path>
           <path class="edge-ignition ${critical ? "critical" : ""}" d="${path}" pathLength="1"></path>
           <path class="edge-ignition-burst ${critical ? "critical" : ""}" d="${path}" pathLength="1"></path>
+          <g class="edge-electric-burst ${critical ? "critical" : ""}" transform="translate(${x1} ${y1}) scale(${direction} 1)">
+            <path class="edge-electric-spike primary" d="M 0 0 L 10 -8 L 7 -3 L 22 -10"></path>
+            <path class="edge-electric-spike secondary" d="M 2 1 L 12 6 L 9 2 L 21 4"></path>
+            <path class="edge-electric-spike tertiary" d="M -1 -1 L 7 -12 L 6 -6 L 16 -15"></path>
+          </g>
           <text class="edge-label ${selected ? "selected" : ""}" x="${labelX}" y="${labelY}">${escapeHtml(label)}</text>
         </g>
       `;
