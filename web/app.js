@@ -829,6 +829,7 @@ function renderEdges(visibleIds, bounds = networkBounds) {
           <path class="edge-hit" d="${path}"></path>
           <path class="edge-shadow ${critical ? "critical" : ""} ${selected ? "selected" : ""}" d="${path}" pathLength="1"></path>
           <path class="edge ${critical ? "critical" : ""} ${selected ? "selected" : ""}" d="${path}" pathLength="1" marker-end="url(#${markerId})"></path>
+          <path class="edge-spark ${critical ? "critical" : ""}" d="${path}" pathLength="1"></path>
           <text class="edge-label ${selected ? "selected" : ""}" x="${labelX}" y="${labelY}">${escapeHtml(label)}</text>
         </g>
       `;
@@ -847,7 +848,7 @@ function triggerConnectionFlash(dependencyId, fromId, toId) {
     document.querySelectorAll(".edge-created, .connection-source-flash, .connection-target-flash").forEach((item) => {
       item.classList.remove("edge-created", "connection-source-flash", "connection-target-flash");
     });
-  }, 1100);
+  }, 1200);
 }
 
 // ノード背面に領域別の帯を描き、広いネットワークでも所属を追いやすくします。
