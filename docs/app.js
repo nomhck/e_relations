@@ -775,7 +775,7 @@ function renderEdges(visibleIds, bounds = networkBounds) {
   const defs = `
     <defs>
       <filter id="edgeGlow" x="-20%" y="-20%" width="140%" height="140%">
-        <feDropShadow dx="0" dy="1.5" stdDeviation="2.2" flood-color="#f29900" flood-opacity="0.42"></feDropShadow>
+        <feDropShadow dx="0" dy="1.5" stdDeviation="2.4" flood-color="#6eeaff" flood-opacity="0.58"></feDropShadow>
       </filter>
       <marker id="arrow" viewBox="0 0 12 12" refX="10.4" refY="6" markerWidth="14" markerHeight="14" orient="auto" markerUnits="userSpaceOnUse">
         <path d="M 1.8 1.5 L 10.6 6 L 1.8 10.5 L 4.1 6 Z" fill="#5f6368"></path>
@@ -784,7 +784,7 @@ function renderEdges(visibleIds, bounds = networkBounds) {
         <path d="M 1.8 1.5 L 10.6 6 L 1.8 10.5 L 4.1 6 Z" fill="#b3261e"></path>
       </marker>
       <marker id="arrowSelected" viewBox="0 0 12 12" refX="10.4" refY="6" markerWidth="16" markerHeight="16" orient="auto" markerUnits="userSpaceOnUse">
-        <path d="M 1.8 1.5 L 10.6 6 L 1.8 10.5 L 4.1 6 Z" fill="#f29900"></path>
+        <path d="M 1.8 1.5 L 10.6 6 L 1.8 10.5 L 4.1 6 Z" fill="#00a7c8"></path>
       </marker>
     </defs>
   `;

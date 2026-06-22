@@ -11,6 +11,11 @@
   --red: #b3261e;
   --orange: #f29900;
   --blue: #1967d2;
+  --circuit: #00a7c8;
+  --circuit-bright: #6eeaff;
+  --circuit-ice: #cfffff;
+  --circuit-blue: #7aa7ff;
+  --circuit-deep: #006c7d;
   --shadow: 0 10px 24px rgba(60, 64, 67, 0.12);
 }
 
@@ -783,7 +788,7 @@ button {
 
 .edge-spark {
   fill: none;
-  stroke: #fff4c2;
+  stroke: var(--circuit-ice);
   stroke-width: 6;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -793,7 +798,7 @@ button {
 }
 
 .edge-spark.critical {
-  stroke: #ffd8d3;
+  stroke: #e9fcff;
 }
 
 .edge-hit {
@@ -815,15 +820,15 @@ button {
 }
 
 .edge.selected {
-  stroke: var(--orange);
+  stroke: var(--circuit);
   stroke-width: 4.2;
   filter: url(#edgeGlow);
 }
 
 .edge-shadow.selected {
-  stroke: var(--orange);
+  stroke: var(--circuit-bright);
   stroke-width: 9;
-  opacity: 0.2;
+  opacity: 0.24;
 }
 
 .edge-group:hover .edge {
@@ -872,7 +877,7 @@ button {
 }
 
 .edge-label.selected {
-  fill: #8a4b00;
+  fill: var(--circuit-deep);
 }
 
 /* タスクノード: ネットワーク上のカード表示、状態バッジ、進捗バーをまとめます。 */
@@ -903,23 +908,23 @@ button {
 }
 
 .node.link-source {
-  outline: 3px solid rgba(242, 153, 0, 0.28);
-  border-color: var(--orange);
+  outline: 3px solid rgba(110, 234, 255, 0.28);
+  border-color: var(--circuit);
   animation: linkSourceBreath 1500ms ease-in-out infinite;
 }
 
 .node.dependency-source,
 .node.dependency-target {
-  outline: 3px solid rgba(242, 153, 0, 0.28);
-  border-color: var(--orange);
+  outline: 3px solid rgba(110, 234, 255, 0.26);
+  border-color: var(--circuit);
 }
 
 .node.dependency-source {
-  box-shadow: 0 0 0 4px rgba(242, 153, 0, 0.12), 0 8px 18px rgba(60, 64, 67, 0.14);
+  box-shadow: 0 0 0 4px rgba(110, 234, 255, 0.13), 0 8px 18px rgba(60, 64, 67, 0.14);
 }
 
 .node.dependency-target {
-  box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.12), 0 8px 18px rgba(60, 64, 67, 0.14);
+  box-shadow: 0 0 0 4px rgba(122, 167, 255, 0.13), 0 8px 18px rgba(60, 64, 67, 0.14);
 }
 
 .node.connection-source-flash,
@@ -928,15 +933,15 @@ button {
 }
 
 .node.connection-source-flash {
-  --connection-ring: rgba(242, 153, 0, 0.34);
-  --connection-ring-soft: rgba(242, 153, 0, 0.13);
-  --connection-ring-clear: rgba(242, 153, 0, 0);
+  --connection-ring: rgba(110, 234, 255, 0.42);
+  --connection-ring-soft: rgba(110, 234, 255, 0.16);
+  --connection-ring-clear: rgba(110, 234, 255, 0);
 }
 
 .node.connection-target-flash {
-  --connection-ring: rgba(26, 115, 232, 0.3);
-  --connection-ring-soft: rgba(26, 115, 232, 0.12);
-  --connection-ring-clear: rgba(26, 115, 232, 0);
+  --connection-ring: rgba(122, 167, 255, 0.36);
+  --connection-ring-soft: rgba(122, 167, 255, 0.14);
+  --connection-ring-clear: rgba(122, 167, 255, 0);
 }
 
 .node.connection-source-flash::after,
@@ -1165,7 +1170,7 @@ button {
   }
 
   50% {
-    box-shadow: 0 0 0 5px rgba(242, 153, 0, 0.12), 0 10px 22px rgba(60, 64, 67, 0.17);
+    box-shadow: 0 0 0 5px rgba(110, 234, 255, 0.14), 0 10px 22px rgba(60, 64, 67, 0.17);
     transform: translateY(-1px);
   }
 }
