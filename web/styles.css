@@ -260,10 +260,59 @@ button {
   font-size: 12px;
 }
 
-.focus-list {
+.focus-list,
+.guide-list {
   display: grid;
   gap: 8px;
   margin-top: 12px;
+}
+
+.guide-section {
+  background: linear-gradient(180deg, #f8fafd, #ffffff);
+}
+
+.guide-list {
+  gap: 7px;
+}
+
+.guide-step {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.guide-index {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #e8f0fe;
+  color: var(--teal-dark);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.guide-step strong,
+.guide-step span {
+  display: block;
+}
+
+.guide-step strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.guide-step div > span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .filters {
