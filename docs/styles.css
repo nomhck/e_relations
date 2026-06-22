@@ -801,6 +801,24 @@ button {
   stroke: #e9fcff;
 }
 
+.edge-arc {
+  fill: none;
+  stroke: var(--circuit-bright);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 0.025 0.12 0.018 0.23;
+  stroke-dashoffset: 1;
+  filter: url(#edgeGlow);
+  opacity: 0;
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.edge-arc.critical {
+  stroke: #f2feff;
+}
+
 .edge-hit {
   fill: none;
   stroke: transparent;
@@ -845,6 +863,10 @@ button {
 
 .edge-group.edge-created .edge-spark {
   animation: edgeSpark 860ms cubic-bezier(0.2, 0.7, 0.2, 1) 90ms 1 both;
+}
+
+.edge-group.edge-created .edge-arc {
+  animation: edgeArcCrackle 680ms steps(5, end) 120ms 1 both;
 }
 
 .edge-group.edge-created .edge-label {
@@ -963,6 +985,30 @@ button {
 
 .node.connection-target-flash::after {
   animation: connectionFrameRipple 760ms ease-out 100ms 1;
+}
+
+.node.connection-source-flash::before,
+.node.connection-target-flash::before {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 13px;
+  padding: 1px;
+  background: conic-gradient(from 230deg, transparent 0 58%, var(--circuit-ice) 62%, var(--connection-ring) 66%, transparent 72% 100%);
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: center;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+
+.node.connection-source-flash::before {
+  animation: connectionFrameTrace 660ms cubic-bezier(0.2, 0.7, 0.2, 1) 1;
+}
+
+.node.connection-target-flash::before {
+  animation: connectionFrameTrace 660ms cubic-bezier(0.2, 0.7, 0.2, 1) 90ms 1;
 }
 
 .node-head,
@@ -1150,6 +1196,40 @@ button {
   }
 }
 
+@keyframes edgeArcCrackle {
+  0% {
+    opacity: 0;
+    stroke-dashoffset: 1;
+  }
+
+  16% {
+    opacity: 0.95;
+  }
+
+  34% {
+    opacity: 0.28;
+    stroke-dashoffset: 0.68;
+  }
+
+  52% {
+    opacity: 0.86;
+  }
+
+  72% {
+    opacity: 0.2;
+    stroke-dashoffset: 0.28;
+  }
+
+  88% {
+    opacity: 0.72;
+  }
+
+  100% {
+    opacity: 0;
+    stroke-dashoffset: -0.12;
+  }
+}
+
 @keyframes edgeLabelPop {
   0% {
     opacity: 0;
@@ -1209,6 +1289,30 @@ button {
   }
 }
 
+@keyframes connectionFrameTrace {
+  0% {
+    opacity: 0;
+    transform: rotate(-8deg) scale(1);
+  }
+
+  18% {
+    opacity: 0.82;
+  }
+
+  42% {
+    opacity: 0.22;
+  }
+
+  58% {
+    opacity: 0.72;
+  }
+
+  100% {
+    opacity: 0;
+    transform: rotate(86deg) scale(1.04);
+  }
+}
+
 /* 選択タスクへ移動したとき、一瞬だけノードを光らせて位置を知らせます。 */
 @keyframes focusPulse {
   0% {
@@ -1224,7 +1328,10 @@ button {
   .edge-group.edge-created .edge,
   .edge-group.edge-created .edge-shadow,
   .edge-group.edge-created .edge-spark,
+  .edge-group.edge-created .edge-arc,
   .edge-group.edge-created .edge-label,
+  .node.connection-source-flash::before,
+  .node.connection-target-flash::before,
   .node.connection-source-flash::after,
   .node.connection-target-flash::after,
   .node.link-source,

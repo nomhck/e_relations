@@ -830,6 +830,7 @@ function renderEdges(visibleIds, bounds = networkBounds) {
           <path class="edge-shadow ${critical ? "critical" : ""} ${selected ? "selected" : ""}" d="${path}" pathLength="1"></path>
           <path class="edge ${critical ? "critical" : ""} ${selected ? "selected" : ""}" d="${path}" pathLength="1" marker-end="url(#${markerId})"></path>
           <path class="edge-spark ${critical ? "critical" : ""}" d="${path}" pathLength="1"></path>
+          <path class="edge-arc ${critical ? "critical" : ""}" d="${path}" pathLength="1"></path>
           <text class="edge-label ${selected ? "selected" : ""}" x="${labelX}" y="${labelY}">${escapeHtml(label)}</text>
         </g>
       `;
