@@ -43,6 +43,8 @@ let undoStack = [];
 let redoStack = [];
 let lastPlanSnapshot = planDataSnapshot(state);
 let lastHistorySnapshot = historyStateSnapshot(state);
+let connectionFlash = null;
+let connectionFlashTimer = null;
 
 // DOM参照を短く書くためのヘルパーと、初期化後に埋める要素キャッシュです。
 const $ = (selector) => document.querySelector(selector);
@@ -94,6 +96,7 @@ function bindEvents() {
   els.linkMode.addEventListener("click", () => {
     // 依存接続モードでは、ノードクリックを「選択」ではなく「依存線作成」に使います。
     state.linkMode = !state.linkMode;
+    if (state.linkMode) state.selectedDependency = null;
     if (!state.linkMode) state.linkSource = null;
     saveState();
     render();
@@ -469,6 +472,16 @@ function validatePlanData(plan) {
 }
 
 function onGlobalKeydown(event) {
+  if (event.key === "Escape" && state.linkMode) {
+    event.preventDefault();
+    state.linkMode = false;
+    state.linkSource = null;
+    saveState();
+    render();
+    setStatus("依存接続を終了しました");
+    return;
+  }
+
   if (!(event.metaKey || event.ctrlKey)) return;
   if (event.target instanceof Element && event.target.closest("input, textarea, select")) return;
 
@@ -570,6 +583,8 @@ function render() {
 
   els.linkMode.classList.toggle("active", state.linkMode);
   els.linkMode.querySelector("span:last-child").textContent = state.linkMode ? "接続中" : "依存接続";
+  els.linkMode.title = state.linkMode ? "依存接続モードを終了" : "依存線の接続モードを切り替え";
+  els.linkMode.setAttribute("aria-label", state.linkMode ? "依存接続モードを終了" : "依存線の接続モードを切り替え");
   els.linkSettings.classList.toggle("active", state.linkMode);
   updateHistoryControls();
   renderEdgeSummary();
@@ -584,9 +599,9 @@ function render() {
 
   if (state.linkMode && state.linkSource) {
     const source = getTask(state.linkSource);
-    setStatus(`接続中: ${source.code} → 後続タスクを選択`, "warn");
+    setStatus(`接続中: ${source?.code || state.linkSource} → 後続タスクを選択。終了は「接続中」またはEsc`, "warn");
   } else if (state.linkMode) {
-    setStatus("接続中: 先行タスクを選択", "warn");
+    setStatus("接続中: 先行タスクを選択。終了は「接続中」またはEsc", "warn");
   } else if (state.view === "guide") {
     setStatus("操作ガイド: 基本操作とビューの使い分けを確認できます");
   } else if (getTask(state.selected)) {
@@ -614,12 +629,12 @@ function renderEdgeSummary() {
     const source = getTask(state.linkSource);
     els.edgeSummary.innerHTML = `
       <strong>${escapeHtml(source ? source.code : state.linkSource)} から接続</strong>
-      <span>${escapeHtml(state.relationType)}${state.lagDays ? ` ${state.lagDays > 0 ? "+" : ""}${state.lagDays}日` : ""}</span>
+      <span>${escapeHtml(state.relationType)}${state.lagDays ? ` ${state.lagDays > 0 ? "+" : ""}${state.lagDays}日` : ""} / Escで終了</span>
     `;
     return;
   }
 
-  els.edgeSummary.textContent = state.linkMode ? "先行タスクを選択" : "依存線をクリックすると詳細を表示";
+  els.edgeSummary.textContent = state.linkMode ? "先行タスクを選択 / Escで終了" : "依存線をクリックすると詳細を表示";
 }
 
 // 工期、タスク数、依存線数、クリティカル数などの概要カードを描画します。
@@ -712,6 +727,7 @@ function renderNetwork() {
   const visibleIds = new Set(visible.map((taskItem) => taskItem.id));
   const size = nodeSize();
   const selectedDep = getDependency(state.selectedDependency);
+  const flash = connectionFlash;
   networkBounds = calculateNetworkBounds(visible);
   els.network.style.width = `${networkBounds.width}px`;
   els.network.style.height = `${networkBounds.height}px`;
@@ -727,7 +743,7 @@ function renderNetwork() {
       const data = schedule.items.get(taskItem.id);
       const timing = computeTaskStatus(taskItem);
       return `
-        <article class="node ${taskItem.id === state.selected ? "selected" : ""} ${data.critical ? "critical" : ""} ${taskItem.id === state.linkSource ? "link-source" : ""} ${selectedDep?.from === taskItem.id ? "dependency-source" : ""} ${selectedDep?.to === taskItem.id ? "dependency-target" : ""}"
+        <article class="node ${taskItem.id === state.selected ? "selected" : ""} ${data.critical ? "critical" : ""} ${taskItem.id === state.linkSource ? "link-source" : ""} ${selectedDep?.from === taskItem.id ? "dependency-source" : ""} ${selectedDep?.to === taskItem.id ? "dependency-target" : ""} ${flash?.fromId === taskItem.id ? "connection-source-flash" : ""} ${flash?.toId === taskItem.id ? "connection-target-flash" : ""}"
           data-id="${taskItem.id}" style="left:${taskItem.x}px;top:${taskItem.y}px;--area-color:${areaColor(taskItem.area)}">
           <div class="node-head">
             <span class="node-code">${escapeHtml(taskItem.code)}</span>
@@ -753,6 +769,7 @@ function renderNetwork() {
 function renderEdges(visibleIds, bounds = networkBounds) {
   const map = new Map(state.tasks.map((taskItem) => [taskItem.id, taskItem]));
   const size = nodeSize();
+  const flash = connectionFlash;
   els.edges.setAttribute("viewBox", `0 0 ${bounds.width} ${bounds.height}`);
 
   const defs = `
@@ -803,14 +820,15 @@ function renderEdges(visibleIds, bounds = networkBounds) {
       const labelX = (x1 + x2) / 2;
       const labelY = (y1 + y2) / 2 + bend * 0.45 - 8;
       const selected = state.selectedDependency === item.id;
+      const created = flash?.dependencyId === item.id;
       const markerId = selected ? "arrowSelected" : critical ? "arrowCritical" : "arrow";
       const path = `M ${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`;
 
       return `
-        <g class="edge-group ${selected ? "selected" : ""}" data-dependency-id="${escapeAttr(item.id)}">
+        <g class="edge-group ${selected ? "selected" : ""} ${created ? "edge-created" : ""}" data-dependency-id="${escapeAttr(item.id)}">
           <path class="edge-hit" d="${path}"></path>
-          <path class="edge-shadow ${critical ? "critical" : ""} ${selected ? "selected" : ""}" d="${path}"></path>
-          <path class="edge ${critical ? "critical" : ""} ${selected ? "selected" : ""}" d="${path}" marker-end="url(#${markerId})"></path>
+          <path class="edge-shadow ${critical ? "critical" : ""} ${selected ? "selected" : ""}" d="${path}" pathLength="1"></path>
+          <path class="edge ${critical ? "critical" : ""} ${selected ? "selected" : ""}" d="${path}" pathLength="1" marker-end="url(#${markerId})"></path>
           <text class="edge-label ${selected ? "selected" : ""}" x="${labelX}" y="${labelY}">${escapeHtml(label)}</text>
         </g>
       `;
@@ -818,6 +836,18 @@ function renderEdges(visibleIds, bounds = networkBounds) {
     .join("");
 
   els.edges.innerHTML = defs + paths;
+}
+
+// 依存線を作成/更新した直後だけ、線と両端タスクに短い反応を付けます。
+function triggerConnectionFlash(dependencyId, fromId, toId) {
+  connectionFlash = { dependencyId, fromId, toId };
+  window.clearTimeout(connectionFlashTimer);
+  connectionFlashTimer = window.setTimeout(() => {
+    connectionFlash = null;
+    document.querySelectorAll(".edge-created, .connection-source-flash, .connection-target-flash").forEach((item) => {
+      item.classList.remove("edge-created", "connection-source-flash", "connection-target-flash");
+    });
+  }, 1100);
 }
 
 // ノード背面に領域別の帯を描き、広いネットワークでも所属を追いやすくします。
@@ -1073,6 +1103,7 @@ function onNodeClick(id) {
     return;
   }
 
+  const fromId = state.linkSource;
   if (existing) {
     existing.type = state.relationType;
     existing.lag = state.lagDays;
@@ -1085,6 +1116,7 @@ function onNodeClick(id) {
 
   state.selected = id;
   saveState();
+  triggerConnectionFlash(state.selectedDependency, fromId, id);
   render();
   requestAnimationFrame(() => focusDependencyRow(state.selectedDependency));
 }

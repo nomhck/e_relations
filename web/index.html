@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>E Relations</title>
-    <link rel="stylesheet" href="./styles.css?v=11">
+    <link rel="stylesheet" href="./styles.css?v=13">
   </head>
   <body>
     <!-- 画面上部: ブランド名、主要操作、依存接続時の入力設定をまとめるヘッダーです。 -->
@@ -70,6 +70,7 @@
         <label>線ラベル
           <input id="edgeLabel" class="edge-label-input" type="text" maxlength="30" placeholder="IFC図・制約">
         </label>
+        <span class="link-exit-hint">終了: 「接続中」を再クリック / Esc</span>
       </div>
     </header>
 
@@ -183,7 +184,7 @@
                 <span class="guide-index">2</span>
                 <div>
                   <h3>依存関係をつなぐ</h3>
-                  <p>「依存接続」を押してから、先行タスク、後続タスクの順にクリックします。依存種別、ラグ日数、線ラベルは上部の接続設定で指定します。</p>
+                  <p>「依存接続」を押し、先行タスク、後続タスクの順にクリックします。続けて同じ先行タスクから接続できます。終わるときは「接続中」をもう一度押すか、Escを押します。</p>
                 </div>
               </article>
               <article class="guide-card">
@@ -231,6 +232,6 @@
       <aside class="inspector" id="inspector"></aside>
     </main>
 
-    <script src="./app.js?v=11"></script>
+    <script src="./app.js?v=13"></script>
   </body>
 </html>

@@ -170,6 +170,19 @@ button {
   font-size: 12px;
 }
 
+.link-exit-hint {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid #fdd663;
+  border-radius: 999px;
+  background: #fff8e1;
+  color: #8a4b00;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .link-settings select,
 .link-settings input,
 .search {
@@ -802,6 +815,20 @@ button {
   stroke-width: 3.4;
 }
 
+.edge-group.edge-created .edge {
+  animation: edgeDraw 620ms cubic-bezier(0.2, 0.7, 0.2, 1) 1 both, edgeSignal 900ms ease-out 1;
+}
+
+.edge-group.edge-created .edge-shadow {
+  animation: edgeShadowSignal 900ms ease-out 1;
+}
+
+.edge-group.edge-created .edge-label {
+  animation: edgeLabelPop 420ms ease-out 1;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
 .network.has-selected-dependency .edge-group:not(.selected) .edge {
   opacity: 0.28;
 }
@@ -843,6 +870,7 @@ button {
   cursor: grab;
   overflow: hidden;
   pointer-events: auto;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
   user-select: none;
 }
 
@@ -858,6 +886,7 @@ button {
 .node.link-source {
   outline: 3px solid rgba(242, 153, 0, 0.28);
   border-color: var(--orange);
+  animation: linkSourceBreath 1500ms ease-in-out infinite;
 }
 
 .node.dependency-source,
@@ -872,6 +901,11 @@ button {
 
 .node.dependency-target {
   box-shadow: 0 0 0 4px rgba(26, 115, 232, 0.12), 0 8px 18px rgba(60, 64, 67, 0.14);
+}
+
+.node.connection-source-flash,
+.node.connection-target-flash {
+  animation: connectionNodePulse 780ms ease-out 1;
 }
 
 .node-head,
@@ -1006,6 +1040,83 @@ button {
   animation: focusPulse 900ms ease-out 1;
 }
 
+@keyframes edgeDraw {
+  0% {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+  }
+
+  100% {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes edgeSignal {
+  0% {
+    stroke-width: 5.2;
+    filter: url(#edgeGlow);
+  }
+
+  100% {
+    stroke-width: 4.2;
+  }
+}
+
+@keyframes edgeShadowSignal {
+  0% {
+    opacity: 0.34;
+    stroke-width: 13;
+  }
+
+  100% {
+    opacity: 0.2;
+    stroke-width: 9;
+  }
+}
+
+@keyframes edgeLabelPop {
+  0% {
+    opacity: 0;
+    transform: translateY(3px) scale(0.94);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes linkSourceBreath {
+  0%,
+  100% {
+    box-shadow: 0 8px 18px rgba(60, 64, 67, 0.14);
+    transform: translateY(0);
+  }
+
+  50% {
+    box-shadow: 0 0 0 5px rgba(242, 153, 0, 0.12), 0 10px 22px rgba(60, 64, 67, 0.17);
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes connectionNodePulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(242, 153, 0, 0.42), 0 8px 18px rgba(60, 64, 67, 0.14);
+    transform: translateY(0) scale(1);
+  }
+
+  45% {
+    box-shadow: 0 0 0 8px rgba(242, 153, 0, 0.16), 0 12px 24px rgba(60, 64, 67, 0.18);
+    transform: translateY(-2px) scale(1.012);
+  }
+
+  100% {
+    box-shadow: 0 0 0 15px rgba(242, 153, 0, 0), 0 8px 18px rgba(60, 64, 67, 0.14);
+    transform: translateY(0) scale(1);
+  }
+}
+
 /* 選択タスクへ移動したとき、一瞬だけノードを光らせて位置を知らせます。 */
 @keyframes focusPulse {
   0% {
@@ -1014,6 +1125,18 @@ button {
 
   100% {
     box-shadow: 0 0 0 18px rgba(26, 115, 232, 0), 0 8px 18px rgba(60, 64, 67, 0.14);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edge-group.edge-created .edge,
+  .edge-group.edge-created .edge-shadow,
+  .edge-group.edge-created .edge-label,
+  .node.link-source,
+  .node.connection-source-flash,
+  .node.connection-target-flash,
+  .node.focus-pulse {
+    animation: none;
   }
 }
 
@@ -1353,6 +1476,11 @@ tr.selected {
 
   .link-settings label:first-child {
     grid-column: 1 / -1;
+  }
+
+  .link-exit-hint {
+    grid-column: 1 / -1;
+    justify-content: center;
   }
 
   .link-settings select,
